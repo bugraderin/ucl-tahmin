@@ -91,6 +91,15 @@ create policy "tahmin guncelle" on public.predictions for update to authenticate
 create policy "tahmin sil" on public.predictions for delete to authenticated
   using (user_id = auth.uid() and not public.match_locked(match_id));
 
+-- ------------------------------------------------------- API yetkileri
+-- Supabase'de "Automatically expose new tables" kapalı olsa da uygulamanın
+-- çalışması için gereken yetkiler burada açıkça veriliyor.
+-- Satır bazlı erişimi yukarıdaki RLS kuralları belirler.
+grant usage on schema public to anon, authenticated;
+grant select                         on public.matches     to anon, authenticated;
+grant select, insert, update         on public.profiles    to authenticated;
+grant select, insert, update, delete on public.predictions to authenticated;
+
 -- ------------------------------------------------- kayıt olunca profil aç
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public as $$
