@@ -4,6 +4,6 @@
  * veriyi RLS kuralları korur (bkz. supabase/schema.sql).
  */
 window.APP_CONFIG = {
-  SUPABASE_URL: "BURAYA_SUPABASE_URL",
-  SUPABASE_ANON_KEY: "BURAYA_ANON_KEY",
+  SUPABASE_URL: "https://rxlngpzxqxzowupwohxc.supabase.co",
+  SUPABASE_ANON_KEY: "sb_publishable_mq2Bld6zrmJfoaEIimf3jA_5bydqxtE",
 };
