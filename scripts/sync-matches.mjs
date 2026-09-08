@@ -1,0 +1,103 @@
+/**
+ * football-data.org -> Supabase "matches" senkronu.
+ * GitHub Actions tarafından yarım saatte bir çalıştırılır.
+ *
+ * Gerekli ortam değişkenleri (GitHub repo > Settings > Secrets):
+ *   FOOTBALL_DATA_TOKEN         football-data.org ücretsiz API anahtarı
+ *   SUPABASE_URL                https://xxxx.supabase.co
+ *   SUPABASE_SERVICE_ROLE_KEY   Supabase > Settings > API > service_role
+ */
+
+const TOKEN       = must('FOOTBALL_DATA_TOKEN');
+const SB_URL      = must('SUPABASE_URL').replace(/\/+$/, '');
+const SB_KEY      = must('SUPABASE_SERVICE_ROLE_KEY');
+const COMPETITION = process.env.COMPETITION || 'CL';
+
+function must(name) {
+  const v = process.env[name];
+  if (!v) { console.error(`Eksik ortam değişkeni: ${name}`); process.exit(1); }
+  return v;
+}
+
+const STAGE_TR = {
+  LEAGUE_STAGE:    (md) => `Lig Aşaması — ${md}. Hafta`,
+  GROUP_STAGE:     (md) => `Grup Aşaması — ${md}. Hafta`,
+  PLAYOFFS:        () => 'Play-off Turu',
+  PLAYOFF_ROUND_1: () => 'Play-off Turu',
+  ROUND_OF_16:     () => 'Son 16',
+  LAST_16:         () => 'Son 16',
+  QUARTER_FINALS:  () => 'Çeyrek Final',
+  SEMI_FINALS:     () => 'Yarı Final',
+  FINAL:           () => 'Final',
+};
+
+function roundLabel(m) {
+  const fn = STAGE_TR[m.stage];
+  if (fn) return fn(m.matchday);
+  return (m.stage || 'Maçlar').replaceAll('_', ' ');
+}
+
+/** Bir tarihin İstanbul saatine göre gün anahtarı: "2026-09-16" */
+const dayKeyFmt = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Europe/Istanbul', year: 'numeric', month: '2-digit', day: '2-digit',
+});
+const dayKey = (iso) => dayKeyFmt.format(new Date(iso));
+
+async function fetchMatches() {
+  const url = `https://api.football-data.org/v4/competitions/${COMPETITION}/matches`;
+  const res = await fetch(url, { headers: { 'X-Auth-Token': TOKEN } });
+  if (!res.ok) throw new Error(`football-data.org ${res.status}: ${await res.text()}`);
+  const body = await res.json();
+  return body.matches || [];
+}
+
+function toRows(matches) {
+  // Gün başına kilit: o günün (İstanbul) en erken maçının başlama anı.
+  const firstKickoff = new Map();
+  for (const m of matches) {
+    const k = dayKey(m.utcDate);
+    const t = new Date(m.utcDate).getTime();
+    if (!firstKickoff.has(k) || t < firstKickoff.get(k)) firstKickoff.set(k, t);
+  }
+
+  return matches.map((m) => ({
+    id:          m.id,
+    utc_date:    m.utcDate,
+    lock_at:     new Date(firstKickoff.get(dayKey(m.utcDate))).toISOString(),
+    stage:       m.stage ?? null,
+    matchday:    m.matchday ?? null,
+    round_label: roundLabel(m),
+    status:      m.status,
+    home_team:   m.homeTeam?.shortName || m.homeTeam?.name || 'Belirlenecek',
+    home_crest:  m.homeTeam?.crest ?? null,
+    away_team:   m.awayTeam?.shortName || m.awayTeam?.name || 'Belirlenecek',
+    away_crest:  m.awayTeam?.crest ?? null,
+    home_score:  m.score?.fullTime?.home ?? null,
+    away_score:  m.score?.fullTime?.away ?? null,
+    updated_at:  new Date().toISOString(),
+  }));
+}
+
+async function upsert(rows) {
+  for (let i = 0; i < rows.length; i += 200) {
+    const chunk = rows.slice(i, i + 200);
+    const res = await fetch(`${SB_URL}/rest/v1/matches?on_conflict=id`, {
+      method: 'POST',
+      headers: {
+        apikey: SB_KEY,
+        Authorization: `Bearer ${SB_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates,return=minimal',
+      },
+      body: JSON.stringify(chunk),
+    });
+    if (!res.ok) throw new Error(`Supabase ${res.status}: ${await res.text()}`);
+  }
+}
+
+const matches = await fetchMatches();
+if (!matches.length) { console.log('API boş liste döndü, işlem yok.'); process.exit(0); }
+const rows = toRows(matches);
+await upsert(rows);
+const finished = rows.filter((r) => r.status === 'FINISHED').length;
+console.log(`${rows.length} maç senkronlandı (${finished} tanesi bitmiş).`);

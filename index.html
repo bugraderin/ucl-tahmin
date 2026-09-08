@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Şampiyonlar Ligi Tahmin Ligi</title>
+  <meta name="theme-color" content="#050b2e" />
+  <meta name="description" content="Şirket içi Şampiyonlar Ligi tahmin yarışması" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⭐</text></svg>" />
+  <link rel="stylesheet" href="styles.css" />
+  <script src="config.js"></script>
+</head>
+<body>
+  <div class="stars" aria-hidden="true"></div>
+
+  <!-- ------------------------------------------------ giriş ekranı -->
+  <main id="auth" class="auth hidden">
+    <div class="auth-card">
+      <div class="crest">★</div>
+      <h1>Şampiyonlar Ligi<br /><span>Tahmin Ligi</span></h1>
+      <p class="auth-sub">Maç başına 1 / X / 2 tahmini yap, arkadaşlarını geç.</p>
+
+      <div class="seg" role="tablist">
+        <button class="seg-btn active" data-mode="login" role="tab">Giriş yap</button>
+        <button class="seg-btn" data-mode="register" role="tab">Kayıt ol</button>
+      </div>
+
+      <form id="auth-form" autocomplete="on">
+        <label class="field name-field hidden">
+          <span>Görünen ad</span>
+          <input id="f-name" type="text" maxlength="24" placeholder="Buğra" autocomplete="nickname" />
+        </label>
+        <label class="field">
+          <span>E-posta</span>
+          <input id="f-email" type="email" required placeholder="ad@sirket.com" autocomplete="email" />
+        </label>
+        <label class="field">
+          <span>Şifre</span>
+          <input id="f-pass" type="password" required minlength="6" placeholder="En az 6 karakter" autocomplete="current-password" />
+        </label>
+        <button class="btn primary block" id="auth-submit" type="submit">Giriş yap</button>
+        <p class="auth-msg" id="auth-msg"></p>
+      </form>
+    </div>
+  </main>
+
+  <!-- ----------------------------------------------- uygulama -->
+  <div id="app" class="hidden">
+    <header class="top">
+      <div class="brand"><span class="crest sm">★</span> Tahmin Ligi</div>
+      <div class="who">
+        <span id="me-name"></span>
+        <button class="btn ghost sm" id="logout">Çıkış</button>
+      </div>
+    </header>
+
+    <div id="reminder" class="reminder hidden"></div>
+
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-view="matches" role="tab">Maçlar</button>
+      <button class="tab" data-view="mine" role="tab">Tahminlerim</button>
+      <button class="tab" data-view="table" role="tab">Puan Durumu</button>
+    </nav>
+
+    <main class="content">
+      <section id="view-matches" class="view">
+        <div class="round-bar">
+          <button class="btn ghost sm" id="round-prev" aria-label="Önceki tur">‹</button>
+          <select id="round-select" aria-label="Tur seç"></select>
+          <button class="btn ghost sm" id="round-next" aria-label="Sonraki tur">›</button>
+        </div>
+        <div id="days"></div>
+      </section>
+
+      <section id="view-mine" class="view hidden"></section>
+
+      <section id="view-table" class="view hidden">
+        <div id="standings"></div>
+        <h2 class="section-title">Tur şampiyonları</h2>
+        <div id="round-winners"></div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      Doğru 1/X/2 → <b>3 puan</b> · Tam skor → <b>+2 bonus</b> · Yanlış skorun cezası yok.<br />
+      Tahminler o günün ilk maçı başlayınca kilitlenir.
+    </footer>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <div id="boot" class="boot"><div class="spinner"></div></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

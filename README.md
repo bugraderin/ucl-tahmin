@@ -1,0 +1,111 @@
+# ⭐ Şampiyonlar Ligi Tahmin Ligi
+
+Şirket içi tahmin yarışması. Her maç için **1 / X / 2**, istersen ek olarak skor tahmini.
+Sunucu yok, aylık ücret yok — GitHub Pages (site) + Supabase (kullanıcı & tahmin) ücretsiz
+katmanlarında çalışır.
+
+**Puanlama**
+| Durum | Puan |
+|---|---|
+| 1/X/2 doğru | **3** |
+| Üstüne tam skor da doğru | **+2 bonus** |
+| Skor yanlış | ceza yok |
+
+**Kilit:** Bir günün ilk maçı başladığında o güne ait tüm tahminler kilitlenir; kilitten
+sonra herkesin tahmini görünür hale gelir.
+
+---
+
+## Kurulum (yaklaşık 15 dakika, tek seferlik)
+
+Aşağıdaki adımları **yalnızca sen** yapıyorsun. Katılımcıların GitHub hesabına ihtiyacı yok;
+onlar sadece site adresine girip e-posta + şifre ile kayıt oluyor.
+
+### 1) Football-Data API anahtarı (ücretsiz)
+
+1. https://www.football-data.org/client/register adresinden kayıt ol.
+2. E-postana gelen **API token**'ı sakla.
+   Ücretsiz plan Şampiyonlar Ligi'ni kapsar (dakikada 10 istek — bizim için fazlasıyla yeter).
+
+### 2) Supabase projesi (ücretsiz)
+
+1. https://supabase.com → **New project**. Bölge olarak *Frankfurt (eu-central-1)* iyi bir seçim.
+2. Sol menüden **SQL Editor → New query**: bu repodaki `supabase/schema.sql` dosyasının
+   tamamını yapıştır ve **Run**. (Tablolar, güvenlik kuralları ve puan tablosu oluşur.)
+3. **Authentication → Sign In / Providers → Email**: `Confirm email` seçeneğini **kapat**.
+   Böylece arkadaşların kayıt olur olmaz girebilir. (Açık bırakırsan herkesin doğrulama
+   mailindeki linke tıklaması gerekir; Supabase'in ücretsiz mail gönderimi saatte birkaç
+   adetle sınırlıdır, ofis grubunda sıkıntı çıkarır.)
+4. **Settings → API** sayfasından şu üç değeri not et:
+   - `Project URL`
+   - `anon public` anahtarı
+   - `service_role` anahtarı ← **bu gizlidir, sadece GitHub Secret olarak kullanılacak**
+
+### 3) Repoyu yayına al
+
+1. Bu klasörü kendi GitHub hesabında **public** bir repo olarak yayınla:
+   ```bash
+   gh repo create ucl-tahmin --public --source=. --push
+   ```
+2. `config.js` dosyasını aç, `Project URL` ve `anon public` anahtarını yaz, kaydet ve gönder:
+   ```bash
+   git commit -am "Supabase bilgileri" && git push
+   ```
+   > `anon` anahtarının herkese açık olması normaldir; veriyi `schema.sql` içindeki RLS
+   > kuralları korur. `service_role` anahtarını **asla** bu dosyaya yazma.
+3. **Settings → Pages**: *Source* = `Deploy from a branch`, *Branch* = `main` / `/ (root)` → Save.
+   Bir iki dakika içinde siten yayında olur:
+   `https://<kullanıcı-adın>.github.io/ucl-tahmin/`
+4. **Settings → Secrets and variables → Actions → New repository secret** ile üç sır ekle:
+
+   | İsim | Değer |
+   |---|---|
+   | `FOOTBALL_DATA_TOKEN` | football-data.org token'ın |
+   | `SUPABASE_URL` | Supabase Project URL |
+   | `SUPABASE_SERVICE_ROLE_KEY` | Supabase `service_role` anahtarı |
+
+5. **Actions** sekmesi → *Maçları senkronla* → **Run workflow** ile fikstürü ilk kez çek.
+   Bundan sonra yarım saatte bir kendiliğinden çalışır; hem fikstürü hem canlı sonuçları günceller.
+
+### 4) Linki paylaş
+
+Arkadaşlarına tek bir adres gönderiyorsun. Girip "Kayıt ol" diyorlar, görünen adlarını
+yazıyorlar, tahmin yapmaya başlıyorlar.
+
+---
+
+## Sık sorulanlar
+
+**Tahminler gerçekten gizli mi?**
+Evet. Veritabanı kuralları, bir kullanıcının başkasının tahminini maç kilitlenmeden
+okumasını engeller — arayüzde gizlemekle kalmıyoruz, sunucu seviyesinde de erişemiyor.
+
+**Sonuçlar ne zaman işleniyor?**
+GitHub Actions yarım saatte bir sonuçları çekiyor; puan tablosu bunun üzerinden anlık
+hesaplanıyor. Sonucu elle girmen gerekmiyor.
+
+**Uzatma / penaltılar?**
+1/X/2 için maçın normal süre + uzatma sonucu (football-data'nın `fullTime` skoru) esas alınır;
+penaltı atışları puanlamayı etkilemez.
+
+**Başka bir lig de yapabilir miyim?**
+`.github/workflows/sync-matches.yml` içine `COMPETITION` ortam değişkeni ekle:
+`PL` (Premier Lig), `BL1`, `SA`, `PD`, `FL1`, `EL` gibi kodlar ücretsiz planda mevcut.
+Süper Lig ücretsiz planda yok.
+
+**Kendi alan adımı bağlayabilir miyim?**
+Evet, GitHub Pages ayarlarından *Custom domain* ile ücretsiz (HTTPS dahil).
+
+---
+
+## Dosya düzeni
+
+```
+index.html                       arayüz iskeleti
+styles.css                       koyu UCL teması
+app.js                           tüm uygulama mantığı
+config.js                        Supabase URL + anon key (senin dolduracağın yer)
+supabase/schema.sql              tablolar, güvenlik kuralları, puan tablosu
+scripts/sync-matches.mjs         football-data.org → Supabase senkronu
+.github/workflows/sync-matches.yml  yarım saatlik zamanlanmış görev
+```
