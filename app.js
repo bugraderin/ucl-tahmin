@@ -67,6 +67,7 @@ const state = {
   activeDay: null,
   fDay: null,      // 'all' | gün anahtarı
   fUser: null,     // 'all' | user_id
+  lastSync: null,  // maclarin en son guncellendigi an
   view: 'matches',
 };
 
@@ -171,6 +172,8 @@ async function loadAll() {
   if (mRes.error) throw mRes.error;
 
   state.matches = mRes.data || [];
+  state.lastSync = state.matches.reduce(
+    (a, m) => (!a || m.updated_at > a ? m.updated_at : a), null);
 
   state.profiles = new Map((prRes.data || []).map((p) => [p.id, p.display_name]));
   state.displayName = state.profiles.get(state.user.id) || (state.user.email || '').split('@')[0];
@@ -668,6 +671,7 @@ async function showApp() {
       renderMatches();
     }
     renderReminder();
+    renderStamp();
   } catch (e) {
     toast('Veri yüklenemedi: ' + e.message, true);
   } finally {
@@ -687,7 +691,72 @@ const { data: { session } } = await sb.auth.getSession();
 state.user = session?.user || null;
 if (state.user) await showApp(); else showAuth();
 
-// Kilit sayaçlarını canlı tut
+/** Footer'daki "sonuçlar ne zaman güncellendi" satırı. */
+function renderStamp() {
+  const box = $('#stamp');
+  if (!state.lastSync) { box.textContent = ''; return; }
+  const age = Date.now() - new Date(state.lastSync).getTime();
+  const stale = age > 15 * 60e3;
+  box.className = 'stamp' + (stale ? ' stale' : '');
+  box.textContent = `Sonuçlar ${timeOf(state.lastSync)}'de güncellendi` +
+    (stale ? ` · ${humanLeft(age)} önce, gecikme olabilir` : '');
+}
+
+/** Veriyi yeniden çek ve açık olan sekmeyi tazele. */
+let refreshing = false;
+async function refreshData() {
+  if (refreshing) return;
+  refreshing = true;
+  try {
+    await loadAll();
+    // Kullanıcı skor kutusuna yazıyorsa ekranı altından çekmeyelim.
+    if (document.activeElement?.tagName !== 'INPUT') {
+      if (state.view === 'matches') renderMatches();
+      if (state.view === 'preds') renderPredictions();
+      if (state.view === 'table') renderTable();
+    }
+    renderReminder();
+    renderStamp();
+  } catch (e) {
+    console.warn('tazeleme başarısız', e);
+  } finally {
+    refreshing = false;
+  }
+}
+
+/** Şu an oynanan ya da yeni başlamış maç var mı? */
+function matchWindow() {
+  const now = Date.now();
+  return state.matches.some((m) => {
+    if (isLive(m)) return true;
+    if (m.status === 'FINISHED') return false;
+    const d = now - new Date(m.utc_date).getTime();
+    return d > -20 * 60e3 && d < 3 * 3600e3;
+  });
+}
+
+// Geri sayımlar dakikada bir tazelenir (veri çekmeden).
 setInterval(() => {
-  if (state.user && state.view === 'matches') { renderMatches(); renderReminder(); }
+  if (!state.user) return;
+  if (state.view === 'matches' && document.activeElement?.tagName !== 'INPUT') renderMatches();
+  renderReminder();
+  renderStamp();
 }, 60000);
+
+// Maç saatlerinde 2 dakikada bir, diğer zamanlarda 10 dakikada bir veri çek.
+let lastFetch = Date.now();
+setInterval(() => {
+  if (!state.user || document.hidden) return;
+  const gap = matchWindow() ? 2 * 60e3 : 10 * 60e3;
+  if (Date.now() - lastFetch < gap) return;
+  lastFetch = Date.now();
+  refreshData();
+}, 30000);
+
+// Sekmeye geri dönüldüğünde beklemeden tazele.
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && state.user && Date.now() - lastFetch > 60e3) {
+    lastFetch = Date.now();
+    refreshData();
+  }
+});

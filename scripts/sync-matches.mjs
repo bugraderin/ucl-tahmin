@@ -95,9 +95,45 @@ async function upsert(rows) {
   }
 }
 
-const matches = await fetchMatches();
-if (!matches.length) { console.log('API boş liste döndü, işlem yok.'); process.exit(0); }
-const rows = toRows(matches);
-await upsert(rows);
-const finished = rows.filter((r) => r.status === 'FINISHED').length;
-console.log(`${rows.length} maç senkronlandı (${finished} tanesi bitmiş).`);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Maç oynanıyor mu, ya da yakında mı başlıyor? */
+function busy(rows) {
+  const now = Date.now();
+  return rows.some((r) => {
+    if (['IN_PLAY', 'PAUSED'].includes(r.status)) return true;
+    const t = new Date(r.utc_date).getTime();
+    // başlamasına 20 dk kaldıysa ya da başlayalı 3 saat olmadıysa
+    return t - now < 20 * 60e3 && now - t < 3 * 3600e3 && r.status !== 'FINISHED';
+  });
+}
+
+async function syncOnce() {
+  const matches = await fetchMatches();
+  if (!matches.length) { console.log('API boş liste döndü, işlem yok.'); return null; }
+  const rows = toRows(matches);
+  await upsert(rows);
+  const fin = rows.filter((r) => r.status === 'FINISHED').length;
+  const live = rows.filter((r) => ['IN_PLAY', 'PAUSED'].includes(r.status)).length;
+  console.log(`${new Date().toISOString().slice(11, 16)} — ${rows.length} maç ` +
+              `(${fin} bitmiş, ${live} canlı)`);
+  return rows;
+}
+
+// WATCH modunda: maç varsa iş bitene kadar takipte kal.
+// GitHub'ın zamanlanmış görevleri sık sık gecikiyor/atlanıyor; tek bir
+// çalıştırma maç akşamını baştan sona kapatabilsin diye böyle yapıldı.
+const WATCH = process.env.WATCH === '1';
+const EVERY = Number(process.env.WATCH_INTERVAL_SEC || 180) * 1000;
+const UNTIL = Date.now() + Number(process.env.WATCH_MINUTES || 50) * 60e3;
+
+let rows = await syncOnce();
+if (WATCH && rows) {
+  while (busy(rows) && Date.now() + EVERY < UNTIL) {
+    await sleep(EVERY);
+    rows = await syncOnce();
+    if (!rows) break;
+  }
+  console.log(busy(rows || []) ? 'Süre doldu, sıradaki çalıştırma devralacak.'
+                               : 'Takip edilecek maç kalmadı, çıkılıyor.');
+}

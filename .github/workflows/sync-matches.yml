@@ -2,16 +2,19 @@ name: Maçları senkronla
 
 on:
   schedule:
-    - cron: '*/30 * * * *'   # yarım saatte bir (fikstür + canlı sonuçlar)
-  workflow_dispatch:          # elle de tetiklenebilir
+    # GitHub'ın zamanlanmış görevleri :00 ve :30 gibi yoğun dakikalarda
+    # sık sık gecikiyor ya da atlanıyor; bilerek sapa dakikalar seçildi.
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
 
 concurrency:
   group: sync-matches
-  cancel-in-progress: false
+  cancel-in-progress: true   # yeni çalıştırma, takipteki eskisini devralır
 
 jobs:
   sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -22,4 +25,8 @@ jobs:
           FOOTBALL_DATA_TOKEN:       ${{ secrets.FOOTBALL_DATA_TOKEN }}
           SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # Maç varsa çalıştırma, maçlar bitene kadar 3 dakikada bir tazeler.
+          WATCH: '1'
+          WATCH_INTERVAL_SEC: '180'
+          WATCH_MINUTES: '50'
         run: node scripts/sync-matches.mjs
