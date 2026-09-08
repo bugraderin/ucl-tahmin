@@ -33,9 +33,9 @@ onlar sadece site adresine girip e-posta + şifre ile kayıt oluyor.
 2. Sol menüden **SQL Editor → New query**: bu repodaki `supabase/schema.sql` dosyasının
    tamamını yapıştır ve **Run**. (Tablolar, güvenlik kuralları ve puan tablosu oluşur.)
 3. **Authentication → Sign In / Providers → Email**: `Confirm email` seçeneğini **kapat**.
-   Böylece arkadaşların kayıt olur olmaz girebilir. (Açık bırakırsan herkesin doğrulama
-   mailindeki linke tıklaması gerekir; Supabase'in ücretsiz mail gönderimi saatte birkaç
-   adetle sınırlıdır, ofis grubunda sıkıntı çıkarır.)
+   Uygulama e-posta sormuyor; kullanıcı adından `ad@ucl-tahmin.local` biçiminde görünmez bir
+   adres üretiyor. Bu ayar açık kalırsa gerçek olmayan adrese doğrulama maili gitmeye
+   çalışacağı için kimse giriş yapamaz.
 4. **Settings → API** sayfasından şu üç değeri not et:
    - `Project URL`
    - `anon public` anahtarı
@@ -69,12 +69,21 @@ onlar sadece site adresine girip e-posta + şifre ile kayıt oluyor.
 
 ### 4) Linki paylaş
 
-Arkadaşlarına tek bir adres gönderiyorsun. Girip "Kayıt ol" diyorlar, görünen adlarını
-yazıyorlar, tahmin yapmaya başlıyorlar.
+Arkadaşlarına tek bir adres gönderiyorsun. Girip "Kayıt ol" diyorlar, **kullanıcı adı ve
+şifre** belirliyorlar, tahmin yapmaya başlıyorlar. E-posta istenmiyor.
+
+> Şifresini unutan olursa: Supabase → Authentication → Users listesinden kullanıcıyı bulup
+> "Reset password" ile yeni şifre belirleyebilirsin. Kullanıcı adı `ad@ucl-tahmin.local`
+> biçiminde görünür.
 
 ---
 
 ## Sık sorulanlar
+
+**Maçları nasıl geziyoruz?**
+Gün gün. Üstteki seçiciden tarihi değiştiriyorsun; o güne ait maçlar ve kilide kalan süre
+görünüyor. Kilit gün bazında: Salı'nın ilk maçı başlayınca sadece Salı maçları kapanır,
+Çarşamba açık kalır.
 
 **Tahminler gerçekten gizli mi?**
 Evet. Veritabanı kuralları, bir kullanıcının başkasının tahminini maç kilitlenmeden

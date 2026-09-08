@@ -18,7 +18,7 @@
     <div class="auth-card">
       <div class="crest">★</div>
       <h1>Şampiyonlar Ligi<br /><span>Tahmin Ligi</span></h1>
-      <p class="auth-sub">Maç başına 1 / X / 2 tahmini yap, arkadaşlarını geç.</p>
+      <p class="auth-sub">Kullanıcı adın ve şifrenle gir, maç başına 1 / X / 2 tahmini yap.</p>
 
       <div class="seg" role="tablist">
         <button class="seg-btn active" data-mode="login" role="tab">Giriş yap</button>
@@ -26,13 +26,9 @@
       </div>
 
       <form id="auth-form" autocomplete="on">
-        <label class="field name-field hidden">
-          <span>Görünen ad</span>
-          <input id="f-name" type="text" maxlength="24" placeholder="Buğra" autocomplete="nickname" />
-        </label>
         <label class="field">
-          <span>E-posta</span>
-          <input id="f-email" type="email" required placeholder="ad@sirket.com" autocomplete="email" />
+          <span>Kullanıcı adı</span>
+          <input id="f-name" type="text" required maxlength="24" placeholder="Buğra" autocomplete="username" />
         </label>
         <label class="field">
           <span>Şifre</span>

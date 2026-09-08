@@ -63,8 +63,8 @@ const state = {
   myPreds: new Map(),      // match_id -> {pick, home_score, away_score}
   allPreds: new Map(),     // match_id -> [{user_id, pick, ...}]
   profiles: new Map(),     // user_id -> display_name
-  rounds: [],
-  activeRound: null,
+  days: [],
+  activeDay: null,
   view: 'matches',
 };
 
@@ -84,12 +84,23 @@ function pointsFor(m, p) {
 /* ==================================================================== */
 let authMode = 'login';
 
+/** Supabase içeride e-posta istiyor; kullanıcı adından görünmez bir adres üretiyoruz. */
+const AUTH_DOMAIN = 'ucl-tahmin.local';
+const TR_MAP = { ç: 'c', ğ: 'g', ı: 'i', ö: 'o', ş: 's', ü: 'u', İ: 'i', I: 'i' };
+
+function userSlug(name) {
+  return name.trim().toLowerCase()
+    .replace(/[çğıöşüİI]/g, (c) => TR_MAP[c] || c)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '.')
+    .replace(/^\.+|\.+$/g, '');
+}
+const slugToEmail = (slug) => `${slug}@${AUTH_DOMAIN}`;
+
 document.querySelectorAll('.seg-btn').forEach((b) => {
   b.onclick = () => {
     authMode = b.dataset.mode;
     document.querySelectorAll('.seg-btn').forEach((x) => x.classList.toggle('active', x === b));
-    $('.name-field').classList.toggle('hidden', authMode !== 'register');
-    $('#f-name').required = authMode === 'register';
     $('#f-pass').autocomplete = authMode === 'register' ? 'new-password' : 'current-password';
     $('#auth-submit').textContent = authMode === 'register' ? 'Kayıt ol' : 'Giriş yap';
     $('#auth-msg').textContent = '';
@@ -100,23 +111,26 @@ $('#auth-form').onsubmit = async (e) => {
   e.preventDefault();
   const btn = $('#auth-submit');
   const msg = $('#auth-msg');
-  const email = $('#f-email').value.trim();
-  const password = $('#f-pass').value;
   const name = $('#f-name').value.trim();
+  const password = $('#f-pass').value;
+  const slug = userSlug(name);
 
   btn.disabled = true;
   msg.className = 'auth-msg';
   msg.textContent = 'Bir saniye…';
 
   try {
+    if (slug.length < 2) throw new Error('Kullanıcı adı en az 2 harf olmalı.');
+    const email = slugToEmail(slug);
+
     if (authMode === 'register') {
-      if (name.length < 2) throw new Error('Görünen ad en az 2 karakter olmalı.');
       const { data, error } = await sb.auth.signUp({
         email, password, options: { data: { display_name: name } },
       });
       if (error) throw error;
       if (!data.session) {
-        msg.textContent = 'Kaydın alındı. E-postana gelen doğrulama linkine tıkla, sonra giriş yap.';
+        // e-posta doğrulaması açık kalmışsa buraya düşer
+        msg.textContent = 'Kaydın alındı ama oturum açılamadı. Yöneticine haber ver.';
         btn.disabled = false;
         return;
       }
@@ -133,9 +147,9 @@ $('#auth-form').onsubmit = async (e) => {
 
 function translateAuthError(m = '') {
   const s = m.toLowerCase();
-  if (s.includes('invalid login')) return 'E-posta veya şifre hatalı.';
-  if (s.includes('already registered')) return 'Bu e-posta zaten kayıtlı, giriş yapmayı dene.';
-  if (s.includes('email not confirmed')) return 'E-postanı doğrulaman gerekiyor, gelen kutuna bak.';
+  if (s.includes('invalid login')) return 'Kullanıcı adı veya şifre hatalı.';
+  if (s.includes('already registered') || s.includes('already exists'))
+    return 'Bu kullanıcı adı alınmış, başka bir ad dene.';
   if (s.includes('password')) return 'Şifre en az 6 karakter olmalı.';
   if (s.includes('rate limit')) return 'Çok fazla deneme oldu, biraz bekle.';
   return m;
@@ -157,7 +171,7 @@ async function loadAll() {
   state.matches = mRes.data || [];
 
   state.profiles = new Map((prRes.data || []).map((p) => [p.id, p.display_name]));
-  state.displayName = state.profiles.get(state.user.id) || state.user.email.split('@')[0];
+  state.displayName = state.profiles.get(state.user.id) || (state.user.email || '').split('@')[0];
   $('#me-name').textContent = state.displayName;
 
   state.myPreds = new Map();
@@ -168,18 +182,12 @@ async function loadAll() {
     state.allPreds.get(p.match_id).push(p);
   }
 
-  // Turlar, ilk maç tarihine göre sıralı
-  const rounds = new Map();
-  for (const m of state.matches) {
-    const label = m.round_label || 'Maçlar';
-    const t = new Date(m.utc_date).getTime();
-    if (!rounds.has(label) || t < rounds.get(label)) rounds.set(label, t);
-  }
-  state.rounds = [...rounds.entries()].sort((a, b) => a[1] - b[1]).map(([label]) => label);
+  // Maçın oynandığı günler, sıralı
+  state.days = [...new Set(state.matches.map((m) => dayKey(m.utc_date)))].sort();
 
-  if (!state.activeRound || !state.rounds.includes(state.activeRound)) {
+  if (!state.activeDay || !state.days.includes(state.activeDay)) {
     const next = state.matches.find((m) => !isLocked(m)) || state.matches[state.matches.length - 1];
-    state.activeRound = next ? next.round_label : state.rounds[0];
+    state.activeDay = next ? dayKey(next.utc_date) : state.days[0];
   }
 }
 
@@ -225,62 +233,55 @@ async function savePrediction(match, patch) {
 /* ==================================================================== */
 /*  Maçlar görünümü                                                      */
 /* ==================================================================== */
-function renderRoundBar() {
+function renderDayBar() {
   const sel = $('#round-select');
   sel.innerHTML = '';
-  for (const r of state.rounds) {
+  for (const d of state.days) {
+    const ms = state.matches.filter((m) => dayKey(m.utc_date) === d);
     const o = el('option');
-    o.value = r; o.textContent = r;
-    o.selected = r === state.activeRound;
+    o.value = d;
+    o.textContent = `${dayLabel(ms[0].utc_date)} · ${ms.length} maç`;
+    o.selected = d === state.activeDay;
     sel.appendChild(o);
   }
-  const i = state.rounds.indexOf(state.activeRound);
+  const i = state.days.indexOf(state.activeDay);
   $('#round-prev').disabled = i <= 0;
-  $('#round-next').disabled = i < 0 || i >= state.rounds.length - 1;
+  $('#round-next').disabled = i < 0 || i >= state.days.length - 1;
 }
 
-$('#round-select').onchange = (e) => { state.activeRound = e.target.value; renderMatches(); };
-$('#round-prev').onclick = () => shiftRound(-1);
-$('#round-next').onclick = () => shiftRound(1);
-function shiftRound(d) {
-  const i = state.rounds.indexOf(state.activeRound) + d;
-  if (i >= 0 && i < state.rounds.length) { state.activeRound = state.rounds[i]; renderMatches(); }
+$('#round-select').onchange = (e) => { state.activeDay = e.target.value; renderMatches(); };
+$('#round-prev').onclick = () => shiftDay(-1);
+$('#round-next').onclick = () => shiftDay(1);
+function shiftDay(d) {
+  const i = state.days.indexOf(state.activeDay) + d;
+  if (i >= 0 && i < state.days.length) { state.activeDay = state.days[i]; renderMatches(); }
 }
 
 function renderMatches() {
-  renderRoundBar();
+  renderDayBar();
   const wrap = $('#days');
   wrap.innerHTML = '';
 
-  const list = state.matches.filter((m) => (m.round_label || 'Maçlar') === state.activeRound);
+  const list = state.matches.filter((m) => dayKey(m.utc_date) === state.activeDay);
   if (!list.length) {
-    wrap.appendChild(el('div', 'empty', 'Bu tur için henüz maç yok.'));
+    wrap.appendChild(el('div', 'empty', 'Bu gün için maç yok.'));
     return;
   }
 
-  const days = new Map();
-  for (const m of list) {
-    const k = dayKey(m.utc_date);
-    if (!days.has(k)) days.set(k, []);
-    days.get(k).push(m);
-  }
+  const first = list[0];
+  const day = el('div', 'day');
+  const left = humanLeft(new Date(first.lock_at).getTime() - Date.now());
 
-  for (const [, ms] of [...days.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
-    const first = ms[0];
-    const day = el('div', 'day');
+  const head = el('div', 'day-head');
+  const title = el('div', 'day-date');
+  title.innerHTML = `${esc(dayLabel(first.utc_date))}` +
+    `<div style="font-size:12px;font-weight:500;color:var(--muted);margin-top:2px">${esc(first.round_label || '')}</div>`;
+  head.appendChild(title);
+  head.appendChild(el('div', left ? 'day-lock open' : 'day-lock closed', left ? `Kilide ${left}` : 'Kilitli'));
+  day.appendChild(head);
 
-    const left = humanLeft(new Date(first.lock_at).getTime() - Date.now());
-    const lockCls = left ? 'day-lock open' : 'day-lock closed';
-    const lockTxt = left ? `Kilide ${left}` : 'Kilitli';
-
-    const head = el('div', 'day-head');
-    head.appendChild(el('div', 'day-date', esc(dayLabel(first.utc_date))));
-    head.appendChild(el('div', lockCls, lockTxt));
-    day.appendChild(head);
-
-    for (const m of ms) day.appendChild(matchCard(m));
-    wrap.appendChild(day);
-  }
+  for (const m of list) day.appendChild(matchCard(m));
+  wrap.appendChild(day);
 }
 
 function teamRow(name, crest, isWinner) {
