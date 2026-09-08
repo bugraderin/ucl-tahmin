@@ -413,18 +413,31 @@ function revealBlock(m, all) {
 /* ==================================================================== */
 function renderReminder() {
   const box = $('#reminder');
+
+  // Yalnızca en yakın kilitlenecek gün ilgilendiriyor; sezonun tamamı değil.
   const open = state.matches.filter((m) => !isLocked(m));
-  const missing = open.filter((m) => !state.myPreds.has(m.id));
+  if (!open.length) { box.classList.add('hidden'); return; }
+
+  const nextLock = open.reduce((a, b) => (new Date(a.lock_at) < new Date(b.lock_at) ? a : b)).lock_at;
+  const sameDay = open.filter((m) => m.lock_at === nextLock);
+  const missing = sameDay.filter((m) => !state.myPreds.has(m.id));
+
   if (!missing.length) { box.classList.add('hidden'); return; }
 
-  const soonest = missing.reduce((a, b) =>
-    new Date(a.lock_at) < new Date(b.lock_at) ? a : b);
-  const left = humanLeft(new Date(soonest.lock_at).getTime() - Date.now());
-  const same = missing.filter((m) => m.lock_at === soonest.lock_at).length;
-
+  const left = humanLeft(new Date(nextLock).getTime() - Date.now());
   box.classList.remove('hidden');
-  box.innerHTML = `⚠️ <b>${missing.length} maç</b> için tahminin yok. ` +
-    `En yakın kilide <b>${left}</b> kaldı (${same} maç).`;
+  box.innerHTML = `⚠️ <b>${esc(whenLabel(sameDay[0].utc_date))}</b> oynanacak ` +
+    `${sameDay.length} maçın <b>${missing.length}</b> tanesinde tahminin yok. ` +
+    `Kilide <b>${left}</b> kaldı.`;
+}
+
+/** "Bugün" / "Yarın" / "12 Eylül Cuma" */
+function whenLabel(iso) {
+  const k = dayKey(iso);
+  const now = Date.now();
+  if (k === dayKey(new Date(now).toISOString())) return 'Bugün';
+  if (k === dayKey(new Date(now + 864e5).toISOString())) return 'Yarın';
+  return dayLabel(iso);
 }
 
 /* ==================================================================== */
@@ -678,63 +691,3 @@ if (state.user) await showApp(); else showAuth();
 setInterval(() => {
   if (state.user && state.view === 'matches') { renderMatches(); renderReminder(); }
 }, 60000);
-
-/* ==================================================================== */
-/*  Marş (resmî YouTube gömme oynatıcısı)                                */
-/* ==================================================================== */
-const MUSIC_KEY = 'ucl-muzik';
-const VIDEO_ID = 'u9oSVuf-0rc';
-
-const store = {
-  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
-  set(k, v) { try { localStorage.setItem(k, v); } catch { /* gizli sekme */ } },
-};
-
-let musicOn = store.get(MUSIC_KEY) === '1';
-
-function mountPlayer() {
-  const box = $('#player');
-  if (box.querySelector('iframe')) return;
-  const f = el('iframe');
-  f.src = `https://www.youtube-nocookie.com/embed/${VIDEO_ID}` +
-          `?autoplay=1&loop=1&playlist=${VIDEO_ID}&rel=0&modestbranding=1`;
-  f.allow = 'autoplay; encrypted-media';
-  f.title = 'Şampiyonlar Ligi marşı';
-  box.appendChild(f);
-  box.classList.remove('hidden');
-}
-
-function unmountPlayer() {
-  const box = $('#player');
-  box.querySelector('iframe')?.remove();
-  box.classList.add('hidden');
-}
-
-function syncMusicBtn() {
-  const b = $('#music');
-  b.textContent = musicOn ? '🔊' : '🎵';
-  b.title = b.ariaLabel = musicOn ? 'Marşı kapat' : 'Marşı çal';
-}
-
-function setMusic(on) {
-  musicOn = on;
-  store.set(MUSIC_KEY, on ? '1' : '0');
-  on ? mountPlayer() : unmountPlayer();
-  syncMusicBtn();
-}
-
-$('#music').onclick = () => setMusic(!musicOn);
-$('#player-close').onclick = () => setMusic(false);
-syncMusicBtn();
-
-// Tarayıcılar sesli otomatik oynatmayı engelliyor; tercihi açık bırakan
-// kullanıcı için sayfadaki ilk dokunuşta başlatıyoruz.
-if (musicOn) {
-  const start = () => {
-    mountPlayer();
-    document.removeEventListener('pointerdown', start);
-    document.removeEventListener('keydown', start);
-  };
-  document.addEventListener('pointerdown', start);
-  document.addEventListener('keydown', start);
-}
