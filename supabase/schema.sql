@@ -100,6 +100,10 @@ grant select                         on public.matches     to anon, authenticate
 grant select, insert, update         on public.profiles    to authenticated;
 grant select, insert, update, delete on public.predictions to authenticated;
 
+-- GitHub Actions senkronu service_role anahtarıyla bağlanır.
+grant usage on schema public to service_role;
+grant select, insert, update, delete on public.matches to service_role;
+
 -- ------------------------------------------------- kayıt olunca profil aç
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public as $$
