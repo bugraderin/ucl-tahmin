@@ -65,6 +65,8 @@ const state = {
   profiles: new Map(),     // user_id -> display_name
   days: [],
   activeDay: null,
+  fDay: null,      // 'all' | gün anahtarı
+  fUser: null,     // 'all' | user_id
   view: 'matches',
 };
 
@@ -426,51 +428,136 @@ function renderReminder() {
 }
 
 /* ==================================================================== */
-/*  Tahminlerim                                                          */
+/*  Tahminler — gün ve kişi filtreli, açılır liste                       */
 /* ==================================================================== */
-function renderMine() {
-  const v = $('#view-mine');
-  v.innerHTML = '';
-  const rows = state.matches
-    .filter((m) => state.myPreds.has(m.id))
-    .sort((a, b) => new Date(b.utc_date) - new Date(a.utc_date));
+function renderFilters() {
+  const dsel = $('#f-day');
+  const usel = $('#f-user');
 
-  if (!rows.length) {
-    v.appendChild(el('div', 'empty', 'Henüz tahmin yapmadın. “Maçlar” sekmesinden başla.'));
+  if (!state.fDay) state.fDay = state.activeDay || 'all';
+  if (!state.fUser) state.fUser = state.user.id;
+
+  dsel.innerHTML = '';
+  const optAll = el('option'); optAll.value = 'all'; optAll.textContent = 'Tüm günler';
+  dsel.appendChild(optAll);
+  for (const d of state.days) {
+    const ms = state.matches.filter((m) => dayKey(m.utc_date) === d);
+    const o = el('option');
+    o.value = d;
+    o.textContent = `${dayLabel(ms[0].utc_date)} · ${ms.length} maç`;
+    dsel.appendChild(o);
+  }
+  dsel.value = state.days.includes(state.fDay) ? state.fDay : 'all';
+  state.fDay = dsel.value;
+
+  usel.innerHTML = '';
+  const uAll = el('option'); uAll.value = 'all'; uAll.textContent = 'Herkes';
+  usel.appendChild(uAll);
+  const people = [...state.profiles.entries()]
+    .sort((a, b) => (a[0] === state.user.id ? -1 : b[0] === state.user.id ? 1 : a[1].localeCompare(b[1], 'tr')));
+  for (const [id, name] of people) {
+    const o = el('option');
+    o.value = id;
+    o.textContent = id === state.user.id ? `${name} (sen)` : name;
+    usel.appendChild(o);
+  }
+  usel.value = state.profiles.has(state.fUser) ? state.fUser : 'all';
+  state.fUser = usel.value;
+
+  dsel.onchange = () => { state.fDay = dsel.value; renderPredictions(); };
+  usel.onchange = () => { state.fUser = usel.value; renderPredictions(); };
+}
+
+function predRow(p, m, showName) {
+  const row = el('div', 'prow');
+  const right = isFinished(m) && m.result === p.pick;
+  const wrong = isFinished(m) && m.result && m.result !== p.pick;
+  row.appendChild(el('div', 'badge' + (right ? ' right' : wrong ? ' wrong' : ''), p.pick));
+  row.appendChild(el('div', 'who-nm',
+    esc(showName ? (state.profiles.get(p.user_id) || 'Bilinmeyen') +
+      (p.user_id === state.user.id ? ' (sen)' : '') : 'Tahminin')));
+  row.appendChild(el('div', 'gs',
+    p.home_score != null && p.away_score != null ? `${p.home_score}-${p.away_score}` : ''));
+  const pts = pointsFor(m, p);
+  row.appendChild(el('div', 'pp' + (pts ? '' : ' zero'), pts == null ? '–' : `${pts} p`));
+  return row;
+}
+
+function renderPredictions() {
+  renderFilters();
+  const box = $('#pred-list');
+  box.innerHTML = '';
+
+  let list = state.matches;
+  if (state.fDay !== 'all') list = list.filter((m) => dayKey(m.utc_date) === state.fDay);
+
+  const cards = [];
+  for (const m of list) {
+    let preds = state.allPreds.get(m.id) || [];
+    if (state.fUser !== 'all') preds = preds.filter((p) => p.user_id === state.fUser);
+    if (!preds.length) continue;
+
+    const d = el('details', 'pred');
+    if (state.fDay !== 'all') d.open = true;
+
+    const sum = el('summary');
+    const fix = el('div', 'fix');
+    fix.appendChild(el('div', 'nm', `${esc(m.home_team)} — ${esc(m.away_team)}`));
+    fix.appendChild(el('div', 'sub',
+      `${esc(dayLabel(m.utc_date))} ${timeOf(m.utc_date)}` +
+      (isLocked(m) ? '' : ' · 🔓 açık') +
+      ` · ${preds.length} tahmin`));
+    sum.appendChild(fix);
+
+    const meta = el('div', 'meta');
+    if (isFinished(m)) meta.appendChild(el('div', 'sc', `${m.home_score}-${m.away_score}`));
+    else meta.appendChild(el('div', '', isLive(m) ? 'canlı' : timeOf(m.utc_date)));
+    sum.appendChild(meta);
+    sum.appendChild(el('div', 'arrow', '›'));
+    d.appendChild(sum);
+
+    const body = el('div', 'body');
+    if (!isLocked(m)) {
+      body.appendChild(el('div', 'locked-note',
+        '🔒 Kilit açılmadan yalnızca kendi tahminini görebilirsin.'));
+    }
+    const order = { '1': 0, X: 1, '2': 2 };
+    for (const p of [...preds].sort((a, b) => order[a.pick] - order[b.pick] ||
+        (state.profiles.get(a.user_id) || '').localeCompare(state.profiles.get(b.user_id) || '', 'tr'))) {
+      body.appendChild(predRow(p, m, state.fUser === 'all'));
+    }
+    d.appendChild(body);
+    cards.push(d);
+  }
+
+  if (!cards.length) {
+    const who = state.fUser === 'all' ? 'Kimse' :
+      state.fUser === state.user.id ? 'Sen' : (state.profiles.get(state.fUser) || 'Bu kişi');
+    box.appendChild(el('div', 'empty',
+      `${who} bu ${state.fDay === 'all' ? 'sezonda' : 'gün için'} tahmin yapmamış.` +
+      (state.fUser !== 'all' && state.fUser !== state.user.id
+        ? '<br><span style="font-size:12.5px">Başkalarının tahminleri ancak o gün kilitlendikten sonra görünür.</span>' : '')));
     return;
   }
 
-  let total = 0, played = 0, correct = 0, exact = 0;
-  for (const m of rows) {
-    const p = state.myPreds.get(m.id);
-    const pts = pointsFor(m, p);
-    if (pts != null) {
+  // Kişi seçiliyse üstte küçük bir özet
+  if (state.fUser !== 'all') {
+    let total = 0, played = 0, correct = 0, exact = 0;
+    for (const m of state.matches) {
+      const p = (state.allPreds.get(m.id) || []).find((x) => x.user_id === state.fUser);
+      const pts = pointsFor(m, p);
+      if (pts == null) continue;
       total += pts; played++;
       if (p.pick === m.result) correct++;
       if (p.home_score != null && p.home_score === m.home_score && p.away_score === m.away_score) exact++;
     }
-  }
-
-  const sum = el('div', 'card');
-  sum.appendChild(el('div', 'ttl', 'Toplam'));
-  sum.appendChild(el('div', 'val',
-    `${total} puan · ${played} maç · ${correct} doğru · ${exact} tam skor`));
-  v.appendChild(sum);
-
-  for (const m of rows) {
-    const p = state.myPreds.get(m.id);
-    const pts = pointsFor(m, p);
     const c = el('div', 'card');
-    c.appendChild(el('div', 'ttl',
-      `${esc(m.round_label || '')} · ${esc(dayLabel(m.utc_date))} ${timeOf(m.utc_date)}`));
-    const score = isFinished(m) ? ` <span style="color:var(--muted)">(${m.home_score}-${m.away_score})</span>` : '';
-    c.appendChild(el('div', 'val', `${esc(m.home_team)} — ${esc(m.away_team)}${score}`));
-    const myScore = p.home_score != null && p.away_score != null ? ` · skor ${p.home_score}-${p.away_score}` : '';
-    const ptsTxt = pts == null ? 'oynanmadı' : `${pts} puan`;
-    c.appendChild(el('div', 'ttl',
-      `Tahminin: <b style="color:var(--text)">${p.pick}</b>${myScore} → <b style="color:${pts ? 'var(--green)' : 'var(--muted)'}">${ptsTxt}</b>`));
-    v.appendChild(c);
+    c.appendChild(el('div', 'ttl', esc(state.profiles.get(state.fUser) || '') + ' · sezon toplamı'));
+    c.appendChild(el('div', 'val', `${total} puan · ${played} maç · ${correct} doğru · ${exact} tam skor`));
+    box.appendChild(c);
   }
+
+  cards.forEach((c) => box.appendChild(c));
 }
 
 /* ==================================================================== */
@@ -538,10 +625,10 @@ document.querySelectorAll('.tab').forEach((tb) => {
   tb.onclick = () => {
     state.view = tb.dataset.view;
     document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('active', x === tb));
-    for (const v of ['matches', 'mine', 'table']) {
+    for (const v of ['matches', 'preds', 'table']) {
       $(`#view-${v}`).classList.toggle('hidden', v !== state.view);
     }
-    if (state.view === 'mine') renderMine();
+    if (state.view === 'preds') renderPredictions();
     if (state.view === 'table') renderTable();
   };
 });

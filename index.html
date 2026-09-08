@@ -7,8 +7,8 @@
   <meta name="theme-color" content="#050b2e" />
   <meta name="description" content="Şirket içi Şampiyonlar Ligi tahmin yarışması" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⭐</text></svg>" />
-  <link rel="stylesheet" href="styles.css?v=4" />
-  <script src="config.js?v=4"></script>
+  <link rel="stylesheet" href="styles.css?v=5" />
+  <script src="config.js?v=5"></script>
 </head>
 <body>
   <div class="stars" aria-hidden="true"></div>
@@ -55,7 +55,7 @@
 
     <nav class="tabs" role="tablist">
       <button class="tab active" data-view="matches" role="tab">Maçlar</button>
-      <button class="tab" data-view="mine" role="tab">Tahminlerim</button>
+      <button class="tab" data-view="preds" role="tab">Tahminler</button>
       <button class="tab" data-view="table" role="tab">Puan Durumu</button>
     </nav>
 
@@ -69,7 +69,13 @@
         <div id="days"></div>
       </section>
 
-      <section id="view-mine" class="view hidden"></section>
+      <section id="view-preds" class="view hidden">
+        <div class="filter-bar">
+          <label class="filt"><span>Gün</span><select id="f-day"></select></label>
+          <label class="filt"><span>Kişi</span><select id="f-user"></select></label>
+        </div>
+        <div id="pred-list"></div>
+      </section>
 
       <section id="view-table" class="view hidden">
         <div id="standings"></div>
@@ -91,6 +97,6 @@
   <div id="toast" class="toast"></div>
   <div id="boot" class="boot"><div class="spinner"></div></div>
 
-  <script type="module" src="app.js?v=4"></script>
+  <script type="module" src="app.js?v=5"></script>
 </body>
 </html>

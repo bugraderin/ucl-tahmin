@@ -85,6 +85,11 @@ Gün gün. Üstteki seçiciden tarihi değiştiriyorsun; o güne ait maçlar ve 
 görünüyor. Kilit gün bazında: Salı'nın ilk maçı başlayınca sadece Salı maçları kapanır,
 Çarşamba açık kalır.
 
+**Başkalarının tahminlerini nasıl görüyoruz?**
+"Tahminler" sekmesinden. Gün ve kişi filtresi var; bir maça tıklayınca herkesin 1/X/2
+seçimi, varsa skor tahmini ve kazandığı puan açılıyor. Kişi seçince o oyuncunun sezon
+toplamı da üstte çıkıyor.
+
 **Tahminler gerçekten gizli mi?**
 Evet. Veritabanı kuralları, bir kullanıcının başkasının tahminini maç kilitlenmeden
 okumasını engeller — arayüzde gizlemekle kalmıyoruz, sunucu seviyesinde de erişemiyor.
