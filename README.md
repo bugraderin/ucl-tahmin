@@ -112,6 +112,28 @@ Evet, GitHub Pages ayarlarından *Custom domain* ile ücretsiz (HTTPS dahil).
 
 ---
 
+## Bekçi (ikinci güvenlik hattı)
+
+GitHub Actions'ın zamanlanmış görevleri garantili değil — 8 Eylül 2026'da 85 dakika hiç
+çalışmadı, maçlar `IN_PLAY` durumunda dondu ve puanlar işlenmedi. Buna karşı üç katman var:
+
+1. **Takip modu** — senkron, maç bitene kadar 3 dakikada bir tazeler; tek çalıştırma bütün
+   maç akşamını kapatır (`WATCH=1`).
+2. **Bekçi** — Supabase içindeki `pg_cron`, 10 dakikada bir "maç saati mi ve veri 12
+   dakikadan eski mi?" diye bakar, öyleyse GitHub akışını tetikler. GitHub'a bağlı değildir.
+   Kurulumu: `supabase/watchdog.sql` (dosyanın başındaki adımlar).
+3. **Uygulama** — maç saatlerinde 2 dakikada bir kendi verisini tazeler ve alt bilgide
+   sonuçların ne zaman güncellendiğini gösterir; 15 dakikayı geçerse uyarır.
+
+Bekçinin durumunu görmek için SQL Editor'de:
+
+```sql
+select * from public.watchdog_durum limit 10;
+```
+
+`status_code` 204 ise tetikleme başarılı. 401/403 görürsen GitHub token'ının süresi
+dolmuştur; yenisini üretip `watchdog.sql`'in 2. adımını tekrar çalıştır.
+
 ## Logo hakkında
 
 `assets/` altındaki görseller UEFA Şampiyonlar Ligi logosundan türetildi (koyu temada

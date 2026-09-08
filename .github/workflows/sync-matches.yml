@@ -5,6 +5,7 @@ on:
     # GitHub'ın zamanlanmış görevleri :00 ve :30 gibi yoğun dakikalarda
     # sık sık gecikiyor ya da atlanıyor; bilerek sapa dakikalar seçildi.
     - cron: '7,22,37,52 * * * *'
+  # Elle, ve veri bayatlayınca Supabase bekçisi tarafından (bkz. supabase/watchdog.sql)
   workflow_dispatch:
 
 concurrency:
