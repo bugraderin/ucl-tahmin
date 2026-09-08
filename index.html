@@ -6,9 +6,10 @@
   <title>Şampiyonlar Ligi Tahmin Ligi</title>
   <meta name="theme-color" content="#050b2e" />
   <meta name="description" content="Şirket içi Şampiyonlar Ligi tahmin yarışması" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⭐</text></svg>" />
-  <link rel="stylesheet" href="styles.css?v=6" />
-  <script src="config.js?v=6"></script>
+  <link rel="icon" type="image/png" href="assets/favicon.png?v=7" />
+  <link rel="apple-touch-icon" href="assets/favicon.png?v=7" />
+  <link rel="stylesheet" href="styles.css?v=7" />
+  <script src="config.js?v=7"></script>
 </head>
 <body>
   <div class="stars" aria-hidden="true"></div>
@@ -16,8 +17,8 @@
   <!-- ------------------------------------------------ giriş ekranı -->
   <main id="auth" class="auth hidden">
     <div class="auth-card">
-      <div class="crest">★</div>
-      <h1>Şampiyonlar Ligi<br /><span>Tahmin Ligi</span></h1>
+      <img class="auth-logo" src="assets/ucl-logo.png?v=7" alt="UEFA Şampiyonlar Ligi" />
+      <h1>Tahmin <span>Ligi</span></h1>
       <p class="auth-sub">Kullanıcı adın ve şifrenle gir, maç başına 1 / X / 2 tahmini yap.</p>
 
       <div class="seg" role="tablist">
@@ -43,7 +44,7 @@
   <!-- ----------------------------------------------- uygulama -->
   <div id="app" class="hidden">
     <header class="top">
-      <div class="brand"><span class="crest sm">★</span> Tahmin Ligi</div>
+      <div class="brand"><img class="brand-logo" src="assets/ucl-ball.png?v=7" alt="" /> Tahmin Ligi</div>
       <div class="who">
         <span id="me-name"></span>
         <button class="btn ghost sm" id="logout">Çıkış</button>
@@ -92,6 +93,6 @@
   <div id="toast" class="toast"></div>
   <div id="boot" class="boot"><div class="spinner"></div></div>
 
-  <script type="module" src="app.js?v=6"></script>
+  <script type="module" src="app.js?v=7"></script>
 </body>
 </html>

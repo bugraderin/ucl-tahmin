@@ -112,10 +112,19 @@ Evet, GitHub Pages ayarlarından *Custom domain* ile ücretsiz (HTTPS dahil).
 
 ---
 
+## Logo hakkında
+
+`assets/` altındaki görseller UEFA Şampiyonlar Ligi logosundan türetildi (koyu temada
+okunabilmesi için beyaza boyandı). Logo UEFA'nın tescilli markasıdır; şirket içi, ticari
+olmayan bir tahmin ligi için kullanılıyor. Ticari bir işte kullanacaksan kendi logonla
+değiştir: `assets/ucl-logo.png` (giriş ekranı), `assets/ucl-ball.png` (üst bar),
+`assets/favicon.png` (sekme ikonu).
+
 ## Dosya düzeni
 
 ```
 index.html                       arayüz iskeleti
+assets/                          logo ve favicon
 styles.css                       koyu UCL teması
 app.js                           tüm uygulama mantığı
 config.js                        Supabase URL + anon key (senin dolduracağın yer)
