@@ -205,11 +205,19 @@ async function savePrediction(match, patch) {
     updated_at: new Date().toISOString(),
   };
 
-  // İki skor da girildiyse 1/X/2 tahminini skorla uyumlu hale getir.
+  // Skor tahmini ile 1/X/2 birbiriyle tutarlı olmak zorunda.
   if (next.home_score != null && next.away_score != null) {
     const derived = next.home_score > next.away_score ? '1'
                   : next.home_score === next.away_score ? 'X' : '2';
-    if (next.pick !== derived) next.pick = derived;
+    if (!next.pick) {
+      next.pick = derived;                    // henüz seçim yoksa skordan türet
+    } else if (next.pick !== derived) {
+      const ad = { '1': 'ev sahibi kazanır', X: 'beraberlik', '2': 'deplasman kazanır' };
+      toast(`Çelişki: “${next.pick} — ${ad[next.pick]}” seçtin ama ` +
+            `${next.home_score}-${next.away_score} skoru “${ad[derived]}” demek.`, true);
+      renderMatches();                        // girilen değeri geri al
+      return;
+    }
   }
   if (!next.pick) return;
 
