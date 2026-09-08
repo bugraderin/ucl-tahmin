@@ -591,3 +591,63 @@ if (state.user) await showApp(); else showAuth();
 setInterval(() => {
   if (state.user && state.view === 'matches') { renderMatches(); renderReminder(); }
 }, 60000);
+
+/* ==================================================================== */
+/*  Marş (resmî YouTube gömme oynatıcısı)                                */
+/* ==================================================================== */
+const MUSIC_KEY = 'ucl-muzik';
+const VIDEO_ID = 'u9oSVuf-0rc';
+
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch { /* gizli sekme */ } },
+};
+
+let musicOn = store.get(MUSIC_KEY) === '1';
+
+function mountPlayer() {
+  const box = $('#player');
+  if (box.querySelector('iframe')) return;
+  const f = el('iframe');
+  f.src = `https://www.youtube-nocookie.com/embed/${VIDEO_ID}` +
+          `?autoplay=1&loop=1&playlist=${VIDEO_ID}&rel=0&modestbranding=1`;
+  f.allow = 'autoplay; encrypted-media';
+  f.title = 'Şampiyonlar Ligi marşı';
+  box.appendChild(f);
+  box.classList.remove('hidden');
+}
+
+function unmountPlayer() {
+  const box = $('#player');
+  box.querySelector('iframe')?.remove();
+  box.classList.add('hidden');
+}
+
+function syncMusicBtn() {
+  const b = $('#music');
+  b.textContent = musicOn ? '🔊' : '🎵';
+  b.title = b.ariaLabel = musicOn ? 'Marşı kapat' : 'Marşı çal';
+}
+
+function setMusic(on) {
+  musicOn = on;
+  store.set(MUSIC_KEY, on ? '1' : '0');
+  on ? mountPlayer() : unmountPlayer();
+  syncMusicBtn();
+}
+
+$('#music').onclick = () => setMusic(!musicOn);
+$('#player-close').onclick = () => setMusic(false);
+syncMusicBtn();
+
+// Tarayıcılar sesli otomatik oynatmayı engelliyor; tercihi açık bırakan
+// kullanıcı için sayfadaki ilk dokunuşta başlatıyoruz.
+if (musicOn) {
+  const start = () => {
+    mountPlayer();
+    document.removeEventListener('pointerdown', start);
+    document.removeEventListener('keydown', start);
+  };
+  document.addEventListener('pointerdown', start);
+  document.addEventListener('keydown', start);
+}
