@@ -1182,19 +1182,15 @@ $('#chat-form').onsubmit = async (e) => {
 };
 
 /* ==================================================================== */
-/*  Açılış perdesi (şaka) — tarayıcı başına bir kez gösterilir           */
+/*  Açılış perdesi (şaka) — her sayfa açılışında gösterilir              */
 /* ==================================================================== */
-const UYARI_KEY = 'ucl-uyari';
-
 (function initUyari() {
   const w = $('#uyari');
   if (!w) return;
-  if (store.get(UYARI_KEY) === '1') { w.remove(); return; }
 
-  w.classList.remove('hidden');
+  w.classList.remove('hidden');   // her sayfa açılışında gösterilir
 
   const kapat = () => {
-    store.set(UYARI_KEY, '1');
     w.classList.add('kapan');
     setTimeout(() => w.remove(), 550);
   };
