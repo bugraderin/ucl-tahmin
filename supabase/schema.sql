@@ -16,7 +16,7 @@ create table if not exists public.profiles (
 create table if not exists public.matches (
   id          bigint primary key,
   utc_date    timestamptz not null,
-  lock_at     timestamptz not null,          -- o günün ilk maçının başlama anı
+  lock_at     timestamptz not null,          -- maçın kendi başlama anı
   stage       text,
   matchday    int,
   round_label text,                          -- "Lig Aşaması - 1. Hafta"
@@ -53,7 +53,7 @@ create table if not exists public.predictions (
 
 create index if not exists predictions_match_idx on public.predictions (match_id);
 
--- Kilit kontrolü. Kilit = maçın oynandığı günün ilk maçının başlama saati.
+-- Kilit kontrolü. Kilit = maçın kendi başlama saati.
 create or replace function public.match_locked(mid bigint)
 returns boolean
 language sql stable security definer set search_path = public as $$
@@ -84,7 +84,7 @@ drop policy if exists "maclar herkese okunur" on public.matches;
 create policy "maclar herkese okunur" on public.matches for select to anon, authenticated using (true);
 
 -- Tahminler: kendi tahminini her zaman görürsün; başkalarınınkini yalnızca
--- maç BİTTİKTEN sonra. Yazma ise gün kilitlenene kadar mümkün.
+-- maç BİTTİKTEN sonra. Yazma ise maç başlayana kadar mümkün.
 drop policy if exists "tahminleri gor"    on public.predictions;
 drop policy if exists "tahmin ekle"       on public.predictions;
 drop policy if exists "tahmin guncelle"   on public.predictions;

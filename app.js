@@ -205,6 +205,27 @@ async function loadAll() {
 /* ==================================================================== */
 /*  Tahmin kaydetme                                                      */
 /* ==================================================================== */
+/** Seçili butona tekrar basınca tahmini tamamen kaldırır. */
+async function clearPrediction(match) {
+  const prev = state.myPreds.get(match.id);
+  state.myPreds.delete(match.id);          // iyimser güncelleme
+  renderMatches();
+
+  const { error } = await sb.from('predictions').delete()
+    .eq('user_id', state.user.id).eq('match_id', match.id);
+
+  if (error) {
+    if (prev) state.myPreds.set(match.id, prev);
+    renderMatches();
+    toast(error.message.includes('policy')
+      ? 'Bu maç kilitlendi, tahmin kaldırılamaz.'
+      : 'Kaldırılamadı: ' + error.message, true);
+    return;
+  }
+  toast(`${match.home_team} — ${match.away_team}: tahmin kaldırıldı`);
+  renderReminder();
+}
+
 async function savePrediction(match, patch) {
   const prev = state.myPreds.get(match.id) || {};
   const next = {
@@ -289,14 +310,21 @@ function renderMatches() {
 
   const first = list[0];
   const day = el('div', 'day');
-  const left = humanLeft(new Date(first.lock_at).getTime() - Date.now());
+
+  // Kilit artık maç başına; günün bir sonraki kilidini gösteriyoruz.
+  const acik = list.filter((m) => !isLocked(m));
+  const sonraki = acik.length
+    ? acik.reduce((a, b) => (new Date(a.lock_at) < new Date(b.lock_at) ? a : b))
+    : null;
+  const left = sonraki ? humanLeft(new Date(sonraki.lock_at).getTime() - Date.now()) : null;
 
   const head = el('div', 'day-head');
   const title = el('div', 'day-date');
   title.innerHTML = `${esc(dayLabel(first.utc_date))}` +
     `<div style="font-size:12px;font-weight:500;color:var(--muted);margin-top:2px">${esc(first.round_label || '')}</div>`;
   head.appendChild(title);
-  head.appendChild(el('div', left ? 'day-lock open' : 'day-lock closed', left ? `Kilide ${left}` : 'Kilitli'));
+  head.appendChild(el('div', left ? 'day-lock open' : 'day-lock closed',
+    left ? `${timeOf(sonraki.lock_at)} · ${left}` : 'Kilitli'));
   day.appendChild(head);
 
   for (const m of list) day.appendChild(matchCard(m));
@@ -356,7 +384,8 @@ function matchCard(m) {
       if (fin && m.result) b.classList.add(m.result === key ? 'right' : 'wrong');
     }
     b.disabled = locked;
-    b.onclick = () => savePrediction(m, { pick: key });
+    if (mine?.pick === key && !locked) b.title = 'Seçimi kaldırmak için tekrar bas';
+    b.onclick = () => (mine?.pick === key ? clearPrediction(m) : savePrediction(m, { pick: key }));
     picks.appendChild(b);
   }
   card.appendChild(picks);
@@ -436,16 +465,17 @@ function renderReminder() {
   const open = state.matches.filter((m) => !isLocked(m));
   if (!open.length) { box.classList.add('hidden'); return; }
 
+  // Aynı saatte başlayan maçlar birlikte kilitlenir; en yakın gruba bakıyoruz.
   const nextLock = open.reduce((a, b) => (new Date(a.lock_at) < new Date(b.lock_at) ? a : b)).lock_at;
-  const sameDay = open.filter((m) => m.lock_at === nextLock);
-  const missing = sameDay.filter((m) => !state.myPreds.has(m.id));
+  const grup = open.filter((m) => m.lock_at === nextLock);
+  const missing = grup.filter((m) => !state.myPreds.has(m.id));
 
   if (!missing.length) { box.classList.add('hidden'); return; }
 
   const left = humanLeft(new Date(nextLock).getTime() - Date.now());
   box.classList.remove('hidden');
-  box.innerHTML = `⚠️ <b>${esc(whenLabel(sameDay[0].utc_date))}</b> oynanacak ` +
-    `${sameDay.length} maçın <b>${missing.length}</b> tanesinde tahminin yok. ` +
+  box.innerHTML = `⚠️ <b>${esc(whenLabel(grup[0].utc_date))} ${timeOf(nextLock)}</b> — ` +
+    `${grup.length} maçın <b>${missing.length}</b> tanesinde tahminin yok. ` +
     `Kilide <b>${left}</b> kaldı.`;
 }
 

@@ -11,7 +11,8 @@ katmanlarında çalışır.
 | Üstüne tam skor da doğru | **+2 bonus** |
 | Skor yanlış | ceza yok |
 
-**Kilit:** Bir günün ilk maçı başladığında o güne ait tüm tahminler kilitlenir.
+**Kilit:** Her maçın tahmini kendi başlama saatinde kilitlenir. Yani 19:45 maçları
+19:45'te, 22:00 maçları 22:00'de kapanır.
 
 **Görünürlük:** Başkalarının tahminleri ancak **maç bittikten sonra** açılır — maç oynanırken
 herkes yalnızca kendi tahminini görür.
@@ -83,9 +84,8 @@ Arkadaşlarına tek bir adres gönderiyorsun. Girip "Kayıt ol" diyorlar, **kull
 ## Sık sorulanlar
 
 **Maçları nasıl geziyoruz?**
-Gün gün. Üstteki seçiciden tarihi değiştiriyorsun; o güne ait maçlar ve kilide kalan süre
-görünüyor. Kilit gün bazında: Salı'nın ilk maçı başlayınca sadece Salı maçları kapanır,
-Çarşamba açık kalır.
+Gün gün. Üstteki seçiciden tarihi değiştiriyorsun; o güne ait maçlar ve bir sonraki kilide
+kalan süre görünüyor. Seçtiğin butona tekrar basarsan tahmin tamamen kalkar.
 
 **Başkalarının tahminlerini nasıl görüyoruz?**
 "Tahminler" sekmesinden. Gün ve kişi filtresi var; bir maça tıklayınca herkesin 1/X/2

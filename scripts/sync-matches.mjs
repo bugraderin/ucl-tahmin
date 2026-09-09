@@ -37,12 +37,6 @@ function roundLabel(m) {
   return (m.stage || 'Maçlar').replaceAll('_', ' ');
 }
 
-/** Bir tarihin İstanbul saatine göre gün anahtarı: "2026-09-16" */
-const dayKeyFmt = new Intl.DateTimeFormat('en-CA', {
-  timeZone: 'Europe/Istanbul', year: 'numeric', month: '2-digit', day: '2-digit',
-});
-const dayKey = (iso) => dayKeyFmt.format(new Date(iso));
-
 async function fetchMatches() {
   const url = `https://api.football-data.org/v4/competitions/${COMPETITION}/matches`;
   const res = await fetch(url, { headers: { 'X-Auth-Token': TOKEN } });
@@ -52,18 +46,11 @@ async function fetchMatches() {
 }
 
 function toRows(matches) {
-  // Gün başına kilit: o günün (İstanbul) en erken maçının başlama anı.
-  const firstKickoff = new Map();
-  for (const m of matches) {
-    const k = dayKey(m.utcDate);
-    const t = new Date(m.utcDate).getTime();
-    if (!firstKickoff.has(k) || t < firstKickoff.get(k)) firstKickoff.set(k, t);
-  }
-
+  // Kilit maç başına: tahminler o maçın başlama anında kapanır.
   return matches.map((m) => ({
     id:          m.id,
     utc_date:    m.utcDate,
-    lock_at:     new Date(firstKickoff.get(dayKey(m.utcDate))).toISOString(),
+    lock_at:     m.utcDate,
     stage:       m.stage ?? null,
     matchday:    m.matchday ?? null,
     round_label: roundLabel(m),
