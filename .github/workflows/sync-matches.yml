@@ -15,7 +15,7 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 310
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,7 +27,9 @@ jobs:
           SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           # Maç varsa çalıştırma, maçlar bitene kadar 3 dakikada bir tazeler.
+          # Süre bilerek uzun: tek çalıştırma bütün maç akşamını kapatsın,
+          # GitHub'ın zamanlayıcısı saatlerce tetiklemese bile boşluk olmasın.
           WATCH: '1'
           WATCH_INTERVAL_SEC: '180'
-          WATCH_MINUTES: '50'
+          WATCH_MINUTES: '300'
         run: node scripts/sync-matches.mjs
