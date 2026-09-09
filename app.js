@@ -1180,27 +1180,3 @@ $('#chat-form').onsubmit = async (e) => {
   closeMentions();
   await sendMessage(text);
 };
-
-/* ==================================================================== */
-/*  Açılış perdesi (şaka) — her sayfa açılışında gösterilir              */
-/* ==================================================================== */
-(function initUyari() {
-  const w = $('#uyari');
-  if (!w) return;
-
-  w.classList.remove('hidden');   // her sayfa açılışında gösterilir
-
-  const kapat = () => {
-    w.classList.add('kapan');
-    setTimeout(() => w.remove(), 550);
-  };
-
-  $('#uyari-gec').onclick = (e) => { e.stopPropagation(); kapat(); };
-
-  // İlk dokunuş sesi çalar (dosya yoksa sessizce geçer), ikincisi kapatır.
-  w.onclick = () => {
-    $('#uyari-ses')?.play().catch(() => {});
-    w.querySelector('.uyari-ipucu').textContent = 'devam etmek için tekrar dokun';
-    w.onclick = kapat;
-  };
-})();
