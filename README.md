@@ -11,8 +11,10 @@ katmanlarında çalışır.
 | Üstüne tam skor da doğru | **+2 bonus** |
 | Skor yanlış | ceza yok |
 
-**Kilit:** Bir günün ilk maçı başladığında o güne ait tüm tahminler kilitlenir; kilitten
-sonra herkesin tahmini görünür hale gelir.
+**Kilit:** Bir günün ilk maçı başladığında o güne ait tüm tahminler kilitlenir.
+
+**Görünürlük:** Başkalarının tahminleri ancak **maç bittikten sonra** açılır — maç oynanırken
+herkes yalnızca kendi tahminini görür.
 
 ---
 
@@ -87,7 +89,7 @@ görünüyor. Kilit gün bazında: Salı'nın ilk maçı başlayınca sadece Sal
 
 **Başkalarının tahminlerini nasıl görüyoruz?**
 "Tahminler" sekmesinden. Gün ve kişi filtresi var; bir maça tıklayınca herkesin 1/X/2
-seçimi, varsa skor tahmini ve kazandığı puan açılıyor. Kişi seçince o oyuncunun sezon
+seçimi, varsa skor tahmini ve kazandığı puan açılıyor — maç bittikten sonra. Kişi seçince o oyuncunun sezon
 toplamı da üstte çıkıyor.
 
 **Tahminler gerçekten gizli mi?**

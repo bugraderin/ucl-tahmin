@@ -60,6 +60,14 @@ language sql stable security definer set search_path = public as $$
   select coalesce((select lock_at <= now() from public.matches where id = mid), true);
 $$;
 
+-- Görünürlük kontrolü. Başkalarının tahminleri maç BİTİNCE açılır
+-- (kilit gün başında olur ama tahminler maç sürerken gizli kalır).
+create or replace function public.match_finished(mid bigint)
+returns boolean
+language sql stable security definer set search_path = public as $$
+  select coalesce((select status = 'FINISHED' from public.matches where id = mid), false);
+$$;
+
 -- ------------------------------------------------------------------- RLS
 alter table public.profiles    enable row level security;
 alter table public.matches     enable row level security;
@@ -76,13 +84,13 @@ drop policy if exists "maclar herkese okunur" on public.matches;
 create policy "maclar herkese okunur" on public.matches for select to anon, authenticated using (true);
 
 -- Tahminler: kendi tahminini her zaman görürsün; başkalarınınkini yalnızca
--- maç kilitlendikten sonra. Yazma da yalnızca kilit açıkken mümkün.
+-- maç BİTTİKTEN sonra. Yazma ise gün kilitlenene kadar mümkün.
 drop policy if exists "tahminleri gor"    on public.predictions;
 drop policy if exists "tahmin ekle"       on public.predictions;
 drop policy if exists "tahmin guncelle"   on public.predictions;
 drop policy if exists "tahmin sil"        on public.predictions;
 create policy "tahminleri gor" on public.predictions for select to authenticated
-  using (user_id = auth.uid() or public.match_locked(match_id));
+  using (user_id = auth.uid() or public.match_finished(match_id));
 create policy "tahmin ekle" on public.predictions for insert to authenticated
   with check (user_id = auth.uid() and not public.match_locked(match_id));
 create policy "tahmin guncelle" on public.predictions for update to authenticated

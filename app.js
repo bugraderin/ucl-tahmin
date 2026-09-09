@@ -372,10 +372,14 @@ function matchCard(m) {
   if (pts != null) sr.appendChild(el('span', 'pts' + (pts ? '' : ' zero'), `${pts > 0 ? '+' : ''}${pts} puan`));
   card.appendChild(sr);
 
-  // --- kilit açıldıysa: dağılım + kim ne dedi
-  if (locked) {
+  // --- maç bittiyse: dağılım + kim ne dedi
+  if (fin) {
     const all = state.allPreds.get(m.id) || [];
     if (all.length) card.appendChild(revealBlock(m, all));
+
+  } else if (locked) {
+    card.appendChild(el('div', 'reveal',
+      '<div class="locked-note">🔒 Herkesin tahmini maç bitince açılacak.</div>'));
   }
   return card;
 }
@@ -510,6 +514,10 @@ function renderPredictions() {
   const cards = [];
   for (const m of list) {
     let preds = state.allPreds.get(m.id) || [];
+    // Maç bitmeden başkasının tahmini gösterilmez. Sunucu tarafında RLS
+    // zaten engelliyor; burada da süzüyoruz ki arayüz hiçbir koşulda
+    // (önbellek, ileride kural değişimi) sızdırmasın.
+    if (!isFinished(m)) preds = preds.filter((p) => p.user_id === state.user.id);
     if (state.fUser !== 'all') preds = preds.filter((p) => p.user_id === state.fUser);
     if (!preds.length) continue;
 
@@ -521,7 +529,7 @@ function renderPredictions() {
     fix.appendChild(el('div', 'nm', `${esc(m.home_team)} — ${esc(m.away_team)}`));
     fix.appendChild(el('div', 'sub',
       `${esc(dayLabel(m.utc_date))} ${timeOf(m.utc_date)}` +
-      (isLocked(m) ? '' : ' · 🔓 açık') +
+      (isFinished(m) ? '' : isLocked(m) ? ' · 🔒 gizli' : ' · 🔓 açık') +
       ` · ${preds.length} tahmin`));
     sum.appendChild(fix);
 
@@ -533,9 +541,10 @@ function renderPredictions() {
     d.appendChild(sum);
 
     const body = el('div', 'body');
-    if (!isLocked(m)) {
+    if (!isFinished(m)) {
       body.appendChild(el('div', 'locked-note',
-        '🔒 Kilit açılmadan yalnızca kendi tahminini görebilirsin.'));
+        isLocked(m) ? '🔒 Maç bitene kadar yalnızca kendi tahminini görebilirsin.'
+                    : '🔒 Tahminler gizli; maç bitince herkesinki açılır.'));
     }
     const order = { '1': 0, X: 1, '2': 2 };
     for (const p of [...preds].sort((a, b) => order[a.pick] - order[b.pick] ||
@@ -552,7 +561,7 @@ function renderPredictions() {
     box.appendChild(el('div', 'empty',
       `${who} bu ${state.fDay === 'all' ? 'sezonda' : 'gün için'} tahmin yapmamış.` +
       (state.fUser !== 'all' && state.fUser !== state.user.id
-        ? '<br><span style="font-size:12.5px">Başkalarının tahminleri ancak o gün kilitlendikten sonra görünür.</span>' : '')));
+        ? '<br><span style="font-size:12.5px">Başkalarının tahminleri ancak maç bittikten sonra görünür.</span>' : '')));
     return;
   }
 
