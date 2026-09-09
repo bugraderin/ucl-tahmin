@@ -6,10 +6,10 @@
   <title>Şampiyonlar Ligi Tahmin Ligi</title>
   <meta name="theme-color" content="#050b2e" />
   <meta name="description" content="Şirket içi Şampiyonlar Ligi tahmin yarışması" />
-  <link rel="icon" type="image/png" href="assets/favicon.png?v=17" />
-  <link rel="apple-touch-icon" href="assets/favicon.png?v=17" />
-  <link rel="stylesheet" href="styles.css?v=17" />
-  <script src="config.js?v=17"></script>
+  <link rel="icon" type="image/png" href="assets/favicon.png?v=18" />
+  <link rel="apple-touch-icon" href="assets/favicon.png?v=18" />
+  <link rel="stylesheet" href="styles.css?v=18" />
+  <script src="config.js?v=18"></script>
 </head>
 <body>
 <script>
@@ -36,8 +36,16 @@
 
   var tugra = '<svg viewBox="0 0 300 200" style="position:absolute;bottom:6vh;left:50%;transform:translateX(-50%);width:60vmin;opacity:.14;" fill="none" stroke="#ffd700" stroke-width="4" stroke-linecap="round"><path d="M60 170 Q55 60 70 40 M85 170 Q80 55 95 35 M110 170 Q105 55 120 35"/><path d="M60 170 Q160 185 235 150 Q285 128 250 70 Q225 30 185 60 Q160 80 175 115"/><path d="M235 150 Q280 150 270 100 Q262 62 225 78"/><path d="M120 150 Q170 160 205 140"/></svg>';
 
+  var gecildi = false;   // "geç" denince perde bir daha kurulmaz
+
+  function gec() {
+    gecildi = true;
+    var d = document.getElementById('uyari');
+    if (d) { d.style.transition = 'opacity .4s'; d.style.opacity = '0'; setTimeout(function () { d.remove(); }, 400); }
+  }
+
   function goster() {
-    if (document.getElementById('uyari')) return;
+    if (gecildi || document.getElementById('uyari')) return;
     var d = document.createElement('div');
     d.id = 'uyari';
     d.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:radial-gradient(circle at 50% 40%,#0a1a4a,#02040f);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:sans-serif;overflow:hidden;padding:5vw;box-sizing:border-box;";
@@ -45,8 +53,27 @@
       tugra +
       '<div id="ayetKat" dir="rtl" style="position:absolute;top:12%;left:0;right:0;text-align:center;font-family:\'Amiri\',serif;font-size:8vw;color:#ffd700;z-index:0;padding:0 6vw;"></div>' +
       '<div style="font-size:11vw;font-weight:900;text-align:center;z-index:1;">KUMAR<br>HARAMDIR</div>' +
+      '<div style="margin-top:3vh;font-size:3.5vw;opacity:.65;z-index:1;">devam etmek için dokun</div>' +
+      '<button id="uyariGec" style="position:absolute;top:16px;right:16px;z-index:2;padding:8px 14px;font:inherit;font-size:13px;cursor:pointer;color:rgba(255,255,255,.75);background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);border-radius:99px;">geç →</button>' +
       '<audio id="ezan" src="assets/ezan.mp3" preload="auto" loop></audio>';
     document.body.appendChild(d);
+
+    d.querySelector('#uyariGec').addEventListener('click', function (e) {
+      e.stopPropagation();
+      gec();
+    });
+
+    // İlk dokunuş sesi çalar, ikincisi perdeyi geçer.
+    var dokunuldu = false;
+    d.addEventListener('click', function () {
+      if (!dokunuldu) {
+        dokunuldu = true;
+        var a = document.getElementById('ezan');
+        if (a) a.play().catch(function () {});
+        return;
+      }
+      gec();
+    });
   }
 
   function sonrakiAyet() {
@@ -62,17 +89,13 @@
   setInterval(goster, 500);        // katman silinirse geri koy
   sonrakiAyet();
   setInterval(sonrakiAyet, 6000);  // her 6 sn'de yeni söz
-  document.addEventListener('click', function () {
-    var a = document.getElementById('ezan');
-    if (a) a.play().catch(function(){});
-  });
 })();
 </script>
   <div class="stars" aria-hidden="true"></div>
 
   <main id="auth" class="auth hidden">
     <div class="auth-card">
-      <img class="auth-logo" src="assets/ucl-logo.png?v=17" alt="UEFA Şampiyonlar Ligi" />
+      <img class="auth-logo" src="assets/ucl-logo.png?v=18" alt="UEFA Şampiyonlar Ligi" />
       <h1>Tahmin <span>Ligi</span></h1>
       <p class="auth-sub">Kullanıcı adın ve şifrenle gir, maç başına 1 / X / 2 tahmini yap.</p>
 
@@ -99,7 +122,7 @@
   <!-- ----------------------------------------------- uygulama -->
   <div id="app" class="hidden">
     <header class="top">
-      <div class="brand"><img class="brand-logo" src="assets/ucl-ball.png?v=17" alt="" /> Tahmin Ligi</div>
+      <div class="brand"><img class="brand-logo" src="assets/ucl-ball.png?v=18" alt="" /> Tahmin Ligi</div>
       <div class="who">
         <span id="me-name"></span>
         <button class="btn ghost sm" id="logout">Çıkış</button>
@@ -166,6 +189,6 @@
   <div id="toast" class="toast"></div>
   <div id="boot" class="boot"><div class="spinner"></div></div>
 
-  <script type="module" src="app.js?v=17"></script>
+  <script type="module" src="app.js?v=18"></script>
 </body>
 </html>
