@@ -44,6 +44,12 @@ function humanLeft(ms) {
   return `${m} dk`;
 }
 
+/** localStorage bazı bağlamlarda (gizli sekme, site verisi kapalı) hata atar. */
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch { /* önemsiz */ } },
+};
+
 let toastTimer;
 function toast(msg, isErr = false) {
   const t = $('#toast');
@@ -655,11 +661,12 @@ document.querySelectorAll('.tab').forEach((tb) => {
   tb.onclick = () => {
     state.view = tb.dataset.view;
     document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('active', x === tb));
-    for (const v of ['matches', 'preds', 'table']) {
+    for (const v of ['matches', 'preds', 'table', 'chat']) {
       $(`#view-${v}`).classList.toggle('hidden', v !== state.view);
     }
     if (state.view === 'preds') renderPredictions();
     if (state.view === 'table') renderTable();
+    if (state.view === 'chat') { renderChat(); markChatSeen(); }
   };
 });
 
@@ -686,6 +693,7 @@ async function showApp() {
     }
     renderReminder();
     renderStamp();
+    loadChat().then(subscribeChat);
   } catch (e) {
     toast('Veri yüklenemedi: ' + e.message, true);
   } finally {
@@ -731,6 +739,7 @@ async function refreshData() {
     }
     renderReminder();
     renderStamp();
+    loadChat().then(subscribeChat);
   } catch (e) {
     console.warn('tazeleme başarısız', e);
   } finally {
@@ -924,3 +933,122 @@ async function shareCoupon(dayK) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   toast('Kupon indirildi.');
 }
+
+/* ==================================================================== */
+/*  Sohbet                                                              */
+/* ==================================================================== */
+const SEEN_KEY = 'ucl-sohbet-son';
+let messages = [];
+let chatChannel = null;
+
+const fMsgTime = new Intl.DateTimeFormat('tr-TR', {
+  timeZone: TZ, hour: '2-digit', minute: '2-digit',
+});
+const fMsgDay = new Intl.DateTimeFormat('tr-TR', {
+  timeZone: TZ, day: 'numeric', month: 'long',
+});
+
+function unreadCount() {
+  const seen = store.get(SEEN_KEY) || '';
+  return messages.filter((m) => m.created_at > seen && m.user_id !== state.user.id).length;
+}
+
+function renderChatDot() {
+  const dot = $('#chat-dot');
+  if (!dot) return;
+  dot.classList.toggle('hidden', state.view === 'chat' || unreadCount() === 0);
+}
+
+function renderChat(keepScroll = false) {
+  const box = $('#chat-list');
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+  box.innerHTML = '';
+
+  if (!messages.length) {
+    box.appendChild(el('div', 'empty', 'Henüz mesaj yok. İlk yazan sen ol.'));
+    return;
+  }
+
+  let lastDay = '';
+  for (const m of messages) {
+    const day = dayKey(m.created_at);
+    if (day !== lastDay) {
+      box.appendChild(el('div', 'chat-day', esc(fMsgDay.format(new Date(m.created_at)))));
+      lastDay = day;
+    }
+    const mine = m.user_id === state.user.id;
+    const wrap = el('div', 'msg' + (mine ? ' mine' : ''));
+    const who = mine ? 'Sen' : (state.profiles.get(m.user_id) || 'Bilinmeyen');
+    const meta = el('div', 'meta', `${esc(who)} · ${fMsgTime.format(new Date(m.created_at))}`);
+    if (mine) {
+      const del = el('button', 'del', 'sil');
+      del.onclick = () => deleteMessage(m.id);
+      meta.appendChild(del);
+    }
+    wrap.appendChild(meta);
+    wrap.appendChild(el('div', 'bubble', esc(m.body)));
+    box.appendChild(wrap);
+  }
+
+  if (!keepScroll || atBottom) box.scrollTop = box.scrollHeight;
+}
+
+async function loadChat() {
+  const { data, error } = await sb.from('messages')
+    .select('id, user_id, body, created_at')
+    .order('created_at', { ascending: false })
+    .limit(200);
+  if (error) {
+    $('#chat-list').innerHTML =
+      `<div class="empty">Sohbet yüklenemedi.<br><span style="font-size:12.5px">${esc(error.message)}</span></div>`;
+    return;
+  }
+  messages = (data || []).reverse();
+  renderChat();
+  markChatSeen();
+}
+
+function markChatSeen() {
+  const last = messages.length ? messages[messages.length - 1].created_at : new Date().toISOString();
+  store.set(SEEN_KEY, last);
+  renderChatDot();
+}
+
+async function sendMessage(body) {
+  const text = body.trim();
+  if (!text) return;
+  const { error } = await sb.from('messages').insert({ user_id: state.user.id, body: text });
+  if (error) toast('Mesaj gönderilemedi: ' + error.message, true);
+}
+
+async function deleteMessage(id) {
+  const { error } = await sb.from('messages').delete().eq('id', id);
+  if (error) { toast('Silinemedi: ' + error.message, true); return; }
+  messages = messages.filter((m) => m.id !== id);
+  renderChat(true);
+}
+
+/** Anlık yayın: yeni/silinen mesajlar için tabloyu dinle. */
+function subscribeChat() {
+  if (chatChannel) return;
+  chatChannel = sb.channel('sohbet')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (p) => {
+      if (messages.some((m) => m.id === p.new.id)) return;
+      messages.push(p.new);
+      if (state.view === 'chat') { renderChat(true); markChatSeen(); }
+      else renderChatDot();
+    })
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, (p) => {
+      messages = messages.filter((m) => m.id !== p.old.id);
+      if (state.view === 'chat') renderChat(true);
+    })
+    .subscribe();
+}
+
+$('#chat-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const input = $('#chat-input');
+  const text = input.value;
+  input.value = '';
+  await sendMessage(text);
+};

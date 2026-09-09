@@ -114,6 +114,19 @@ Evet, GitHub Pages ayarlarından *Custom domain* ile ücretsiz (HTTPS dahil).
 
 ---
 
+## Sohbet
+
+"Sohbet" sekmesinde grup mesajlaşması var. Supabase Realtime üzerinden anlık çalışır;
+mesajlar 500 karakterle sınırlı, herkes yalnızca kendi mesajını silebilir. Okunmamış mesaj
+varsa sekmede küçük altın nokta belirir. Kurulum: `supabase/chat.sql` dosyasını SQL
+Editor'de bir kez çalıştır.
+
+## Kupon
+
+Maçlar sekmesinin altındaki "🧾 Bu günün kuponunu paylaş" butonu, o güne ait tahminlerini
+kâğıt fiş görünümünde bir PNG olarak üretir. Telefonda paylaşım menüsü açılır, masaüstünde
+dosya iner. Görüntü tamamen tarayıcıda `canvas` ile çizilir, harici kütüphane kullanılmaz.
+
 ## Bekçi (ikinci güvenlik hattı)
 
 GitHub Actions'ın zamanlanmış görevleri garantili değil — 8 Eylül 2026'da 85 dakika hiç
@@ -153,6 +166,8 @@ styles.css                       koyu UCL teması
 app.js                           tüm uygulama mantığı
 config.js                        Supabase URL + anon key (senin dolduracağın yer)
 supabase/schema.sql              tablolar, güvenlik kuralları, puan tablosu
+supabase/chat.sql                sohbet tablosu ve kuralları
+supabase/watchdog.sql            pg_cron bekçisi
 scripts/sync-matches.mjs         football-data.org → Supabase senkronu
 .github/workflows/sync-matches.yml  yarım saatlik zamanlanmış görev
 ```
