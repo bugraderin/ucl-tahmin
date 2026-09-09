@@ -289,3 +289,12 @@ table.tbl tr.me td { background: rgba(77, 139, 255, .11); }
 
 .stamp { margin-top: 8px; font-size: 11.5px; color: rgba(154, 164, 212, .75); }
 .stamp.stale { color: var(--gold); }
+
+/* -------------------------------------------------------------- kupon */
+.coupon-btn {
+  width: 100%; margin-top: 4px; padding: 13px;
+  font-size: 14.5px; font-weight: 600;
+  background: rgba(255, 255, 255, .05);
+  border: 1px dashed rgba(255, 255, 255, .3);
+}
+.coupon-btn:hover { background: rgba(255, 255, 255, .1); border-style: solid; }

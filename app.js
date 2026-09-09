@@ -294,6 +294,11 @@ function renderMatches() {
   day.appendChild(head);
 
   for (const m of list) day.appendChild(matchCard(m));
+
+  const btn = el('button', 'btn coupon-btn', '🧾 Bu günün kuponunu paylaş');
+  btn.onclick = () => shareCoupon(state.activeDay);
+  day.appendChild(btn);
+
   wrap.appendChild(day);
 }
 
@@ -769,3 +774,153 @@ document.addEventListener('visibilitychange', () => {
     refreshData();
   }
 });
+
+/* ==================================================================== */
+/*  Kupon — o günün tahminlerini kâğıt fiş görünümünde PNG olarak üretir */
+/*  Harici kütüphane yok; her şey canvas üzerinde çiziliyor.            */
+/* ==================================================================== */
+
+/** Metni verilen genişliğe sığdır, taşarsa sonuna … koy. */
+function fitText(ctx, text, maxW) {
+  if (ctx.measureText(text).width <= maxW) return text;
+  let t = text;
+  while (t.length > 1 && ctx.measureText(t + '…').width > maxW) t = t.slice(0, -1);
+  return t + '…';
+}
+
+function couponCanvas(dayK) {
+  const list = state.matches
+    .filter((m) => dayKey(m.utc_date) === dayK)
+    .sort((a, b) => new Date(a.utc_date) - new Date(b.utc_date));
+  if (!list.length) return null;
+
+  const S = 2;                        // retina ölçeği
+  const W = 760, PAD = 44;
+  const rowH = 92, headH = 210, footH = 150;
+  const H = headH + list.length * rowH + footH;
+
+  const cv = document.createElement('canvas');
+  cv.width = W * S; cv.height = H * S;
+  const c = cv.getContext('2d');
+  c.scale(S, S);
+
+  const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+  const ink = '#101828', soft = '#667085', line = '#d0d5dd';
+
+  // kâğıt
+  c.fillStyle = '#fdfcf8'; c.fillRect(0, 0, W, H);
+  c.strokeStyle = line; c.lineWidth = 2;
+  c.strokeRect(6, 6, W - 12, H - 12);
+
+  const dashed = (y) => {
+    c.save(); c.strokeStyle = line; c.lineWidth = 1.5;
+    c.setLineDash([6, 6]); c.beginPath();
+    c.moveTo(PAD, y); c.lineTo(W - PAD, y); c.stroke(); c.restore();
+  };
+
+  // --- başlık
+  c.textAlign = 'center'; c.fillStyle = ink;
+  c.font = `700 27px ${MONO}`;
+  c.fillText('ŞAMPİYONLAR LİGİ', W / 2, 74);
+  c.fillText('TAHMİN LİGİ', W / 2, 106);
+  c.font = `15px ${MONO}`; c.fillStyle = soft;
+  c.fillText(list[0].round_label || '', W / 2, 134);
+  c.font = `700 19px ${MONO}`; c.fillStyle = ink;
+  c.fillText(dayLabel(list[0].utc_date).toUpperCase(), W / 2, 164);
+  dashed(186);
+
+  c.textAlign = 'left';
+  c.font = `16px ${MONO}`; c.fillStyle = soft;
+  c.fillText('OYUNCU', PAD, 172 - 0);      // sol üst köşeye ad
+  c.textAlign = 'right';
+  c.font = `700 17px ${MONO}`; c.fillStyle = ink;
+  c.fillText(state.displayName.toUpperCase(), W - PAD, 172);
+
+  // --- satırlar
+  let y = headH;
+  let toplam = 0, bitmis = 0;
+  const adi = { '1': 'EV', X: 'BERABERE', '2': 'DEPLASMAN' };
+
+  for (const m of list) {
+    const p = state.myPreds.get(m.id);
+    const pts = pointsFor(m, p);
+    if (pts != null) { toplam += pts; bitmis++; }
+
+    c.textAlign = 'left'; c.fillStyle = ink; c.font = `600 21px ${MONO}`;
+    c.fillText(fitText(c, `${m.home_team} — ${m.away_team}`, W - PAD * 2 - 110), PAD, y);
+
+    c.font = `15px ${MONO}`; c.fillStyle = soft;
+    const durum = isFinished(m) ? `BİTTİ  ${m.home_score}-${m.away_score}`
+                                : `${timeOf(m.utc_date)} TSİ`;
+    c.fillText(durum, PAD, y + 26);
+
+    // seçim kutusu
+    const bx = W - PAD - 92, by = y - 26, bw = 92, bh = 56;
+    const secim = p?.pick;
+    c.strokeStyle = secim ? ink : line; c.lineWidth = 2;
+    c.strokeRect(bx, by, bw, bh);
+    c.textAlign = 'center';
+    if (secim) {
+      c.fillStyle = ink; c.font = `700 30px ${MONO}`;
+      c.fillText(secim, bx + bw / 2, by + 38);
+      if (p.home_score != null && p.away_score != null) {
+        c.font = `14px ${MONO}`; c.fillStyle = soft;
+        c.fillText(`${p.home_score}-${p.away_score}`, bx + bw / 2, y + 44);
+      }
+    } else {
+      c.fillStyle = line; c.font = `700 28px ${MONO}`;
+      c.fillText('–', bx + bw / 2, by + 38);
+    }
+
+    // sonuç işareti
+    if (pts != null) {
+      c.textAlign = 'right';
+      c.font = `700 17px ${MONO}`;
+      c.fillStyle = pts > 0 ? '#0a7d55' : '#b42318';
+      c.fillText(pts > 0 ? `✓ +${pts}` : '✗ 0', bx - 18, y + 4);
+    }
+
+    y += rowH;
+    if (m !== list[list.length - 1]) dashed(y - 44);
+  }
+
+  // --- alt bilgi
+  dashed(y - 34);
+  c.textAlign = 'left'; c.font = `16px ${MONO}`; c.fillStyle = soft;
+  c.fillText('TOPLAM', PAD, y + 6);
+  c.textAlign = 'right'; c.font = `700 24px ${MONO}`; c.fillStyle = ink;
+  c.fillText(bitmis ? `${toplam} PUAN` : `${list.length} MAÇ`, W - PAD, y + 8);
+
+  c.textAlign = 'center'; c.font = `14px ${MONO}`; c.fillStyle = soft;
+  c.fillText('Doğru 1/X/2 = 3 puan · Tam skor = +2 bonus', W / 2, y + 48);
+  c.font = `600 15px ${MONO}`; c.fillStyle = ink;
+  c.fillText('bugraderin.github.io/ucl-tahmin', W / 2, y + 78);
+
+  return cv;
+}
+
+async function shareCoupon(dayK) {
+  const cv = couponCanvas(dayK);
+  if (!cv) return;
+  const blob = await new Promise((r) => cv.toBlob(r, 'image/png'));
+  if (!blob) { toast('Kupon oluşturulamadı.', true); return; }
+
+  const ad = `kupon-${dayK}.png`;
+  const file = new File([blob], ad, { type: 'image/png' });
+
+  // Telefonda paylaşım menüsü, masaüstünde indirme.
+  if (navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: 'Tahmin kuponum' });
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') return;   // kullanıcı vazgeçti
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = ad;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast('Kupon indirildi.');
+}
