@@ -1180,3 +1180,31 @@ $('#chat-form').onsubmit = async (e) => {
   closeMentions();
   await sendMessage(text);
 };
+
+/* ==================================================================== */
+/*  Açılış perdesi (şaka) — tarayıcı başına bir kez gösterilir           */
+/* ==================================================================== */
+const UYARI_KEY = 'ucl-uyari';
+
+(function initUyari() {
+  const w = $('#uyari');
+  if (!w) return;
+  if (store.get(UYARI_KEY) === '1') { w.remove(); return; }
+
+  w.classList.remove('hidden');
+
+  const kapat = () => {
+    store.set(UYARI_KEY, '1');
+    w.classList.add('kapan');
+    setTimeout(() => w.remove(), 550);
+  };
+
+  $('#uyari-gec').onclick = (e) => { e.stopPropagation(); kapat(); };
+
+  // İlk dokunuş sesi çalar (dosya yoksa sessizce geçer), ikincisi kapatır.
+  w.onclick = () => {
+    $('#uyari-ses')?.play().catch(() => {});
+    w.querySelector('.uyari-ipucu').textContent = 'devam etmek için tekrar dokun';
+    w.onclick = kapat;
+  };
+})();

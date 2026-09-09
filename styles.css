@@ -396,3 +396,36 @@ table.tbl tr.me td { background: rgba(77, 139, 255, .11); }
   }
   .chat-list { height: 52vh; }
 }
+
+/* ------------------------------------------------- açılış perdesi (şaka) */
+.uyari {
+  position: fixed; inset: 0; z-index: 999;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 5vw; box-sizing: border-box; cursor: pointer; overflow: hidden;
+  color: #fff; text-align: center;
+  background: radial-gradient(circle at 50% 40%, #0a1a4a, #02040f);
+  transition: opacity .5s ease;
+}
+.uyari.kapan { opacity: 0; pointer-events: none; }
+.uyari-bg {
+  position: absolute; width: 70vmin; height: 70vmin; opacity: .1; pointer-events: none;
+}
+.uyari-besmele {
+  position: relative; font-family: 'Amiri', 'Times New Roman', serif;
+  font-size: clamp(24px, 8vw, 54px); color: #ffd700; margin-bottom: 3vh; line-height: 1.6;
+}
+.uyari-baslik {
+  position: relative; font-weight: 900; line-height: 1.05; letter-spacing: .02em;
+  font-size: clamp(38px, 11vw, 96px);
+}
+.uyari-ipucu {
+  position: relative; margin-top: 2.5vh; opacity: .7;
+  font-size: clamp(13px, 3.5vw, 18px);
+}
+.uyari-gec {
+  position: absolute; top: 16px; right: 16px; z-index: 2;
+  padding: 8px 14px; font: inherit; font-size: 13px; cursor: pointer;
+  color: rgba(255, 255, 255, .75); background: rgba(255, 255, 255, .08);
+  border: 1px solid rgba(255, 255, 255, .2); border-radius: 99px;
+}
+.uyari-gec:hover { color: #fff; background: rgba(255, 255, 255, .16); }
