@@ -661,12 +661,11 @@ document.querySelectorAll('.tab').forEach((tb) => {
   tb.onclick = () => {
     state.view = tb.dataset.view;
     document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('active', x === tb));
-    for (const v of ['matches', 'preds', 'table', 'chat']) {
+    for (const v of ['matches', 'preds', 'table']) {
       $(`#view-${v}`).classList.toggle('hidden', v !== state.view);
     }
     if (state.view === 'preds') renderPredictions();
     if (state.view === 'table') renderTable();
-    if (state.view === 'chat') { renderChat(); markChatSeen(); }
   };
 });
 
@@ -676,6 +675,8 @@ document.querySelectorAll('.tab').forEach((tb) => {
 function showAuth() {
   $('#auth').classList.remove('hidden');
   $('#app').classList.add('hidden');
+  $('#chat-fab').classList.add('hidden');     // sohbet #app dışında duruyor
+  $('#chat-pop').classList.add('hidden');
   $('#boot').classList.add('hidden');
   $('#auth-submit').disabled = false;
 }
@@ -935,11 +936,12 @@ async function shareCoupon(dayK) {
 }
 
 /* ==================================================================== */
-/*  Sohbet                                                              */
+/*  Sohbet — yüzen baloncuk, @ ile etiketleme                            */
 /* ==================================================================== */
 const SEEN_KEY = 'ucl-sohbet-son';
 let messages = [];
 let chatChannel = null;
+let chatOpen = false;
 
 const fMsgTime = new Intl.DateTimeFormat('tr-TR', {
   timeZone: TZ, hour: '2-digit', minute: '2-digit',
@@ -948,15 +950,34 @@ const fMsgDay = new Intl.DateTimeFormat('tr-TR', {
   timeZone: TZ, day: 'numeric', month: 'long',
 });
 
-function unreadCount() {
-  const seen = store.get(SEEN_KEY) || '';
-  return messages.filter((m) => m.created_at > seen && m.user_id !== state.user.id).length;
+const escRe = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** Mesaj gövdesini kaçırıp @isim geçişlerini vurgular. */
+function withMentions(text) {
+  const html = esc(text);
+  const names = [...state.profiles.values()].sort((a, b) => b.length - a.length);
+  if (!names.length) return html;
+  const re = new RegExp('@(' + names.map((n) => escRe(esc(n))).join('|') + ')', 'g');
+  return html.replace(re, (_, nm) =>
+    `<span class="mention${nm === esc(state.displayName) ? ' me' : ''}">@${nm}</span>`);
 }
 
-function renderChatDot() {
-  const dot = $('#chat-dot');
-  if (!dot) return;
-  dot.classList.toggle('hidden', state.view === 'chat' || unreadCount() === 0);
+const mentionsMe = (m) =>
+  state.displayName && m.body.includes('@' + state.displayName);
+
+function unreadList() {
+  const seen = store.get(SEEN_KEY) || '';
+  return messages.filter((m) => m.created_at > seen && m.user_id !== state.user.id);
+}
+
+function renderBadge() {
+  const fab = $('#chat-fab');
+  const badge = $('#chat-badge');
+  fab.classList.toggle('hidden', !state.user);
+  const list = chatOpen ? [] : unreadList();
+  badge.classList.toggle('hidden', list.length === 0);
+  badge.textContent = list.length > 99 ? '99+' : String(list.length);
+  fab.title = list.some(mentionsMe) ? 'Seni etiketleyen mesaj var' : 'Sohbet';
 }
 
 function renderChat(keepScroll = false) {
@@ -965,7 +986,7 @@ function renderChat(keepScroll = false) {
   box.innerHTML = '';
 
   if (!messages.length) {
-    box.appendChild(el('div', 'empty', 'Henüz mesaj yok. İlk yazan sen ol.'));
+    box.appendChild(el('div', 'empty', 'Henüz mesaj yok.<br>İlk yazan sen ol.'));
     return;
   }
 
@@ -977,7 +998,7 @@ function renderChat(keepScroll = false) {
       lastDay = day;
     }
     const mine = m.user_id === state.user.id;
-    const wrap = el('div', 'msg' + (mine ? ' mine' : ''));
+    const wrap = el('div', 'msg' + (mine ? ' mine' : '') + (mentionsMe(m) ? ' tagged' : ''));
     const who = mine ? 'Sen' : (state.profiles.get(m.user_id) || 'Bilinmeyen');
     const meta = el('div', 'meta', `${esc(who)} · ${fMsgTime.format(new Date(m.created_at))}`);
     if (mine) {
@@ -986,7 +1007,7 @@ function renderChat(keepScroll = false) {
       meta.appendChild(del);
     }
     wrap.appendChild(meta);
-    wrap.appendChild(el('div', 'bubble', esc(m.body)));
+    wrap.appendChild(el('div', 'bubble', withMentions(m.body)));
     box.appendChild(wrap);
   }
 
@@ -1004,14 +1025,13 @@ async function loadChat() {
     return;
   }
   messages = (data || []).reverse();
-  renderChat();
-  markChatSeen();
+  if (chatOpen) renderChat();
+  renderBadge();
 }
 
 function markChatSeen() {
-  const last = messages.length ? messages[messages.length - 1].created_at : new Date().toISOString();
-  store.set(SEEN_KEY, last);
-  renderChatDot();
+  if (messages.length) store.set(SEEN_KEY, messages[messages.length - 1].created_at);
+  renderBadge();
 }
 
 async function sendMessage(body) {
@@ -1028,27 +1048,105 @@ async function deleteMessage(id) {
   renderChat(true);
 }
 
-/** Anlık yayın: yeni/silinen mesajlar için tabloyu dinle. */
 function subscribeChat() {
   if (chatChannel) return;
   chatChannel = sb.channel('sohbet')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (p) => {
       if (messages.some((m) => m.id === p.new.id)) return;
       messages.push(p.new);
-      if (state.view === 'chat') { renderChat(true); markChatSeen(); }
-      else renderChatDot();
+      if (chatOpen) { renderChat(true); markChatSeen(); } else renderBadge();
     })
     .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, (p) => {
       messages = messages.filter((m) => m.id !== p.old.id);
-      if (state.view === 'chat') renderChat(true);
+      if (chatOpen) renderChat(true);
     })
     .subscribe();
 }
+
+/* ------------------------------------------------------- aç / kapat */
+function setChat(open) {
+  chatOpen = open;
+  $('#chat-pop').classList.toggle('hidden', !open);
+  if (open) { renderChat(); markChatSeen(); $('#chat-input').focus(); }
+  renderBadge();
+}
+
+$('#chat-fab').onclick = () => setChat(!chatOpen);
+$('#chat-close').onclick = () => setChat(false);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && chatOpen && $('#mention-box').classList.contains('hidden')) setChat(false);
+});
+
+/* --------------------------------------------- @ ile etiketleme */
+let mentionMatches = [];
+let mentionIx = 0;
+
+/** İmlecin solundaki "@..." parçasını bulur. */
+function mentionQuery(input) {
+  const upto = input.value.slice(0, input.selectionStart ?? input.value.length);
+  const at = upto.lastIndexOf('@');
+  if (at < 0) return null;
+  if (at > 0 && !/\s/.test(upto[at - 1])) return null;   // kelime ortasındaki @ sayılmaz
+  const q = upto.slice(at + 1);
+  if (/[\n]/.test(q) || q.length > 24) return null;
+  return { at, q };
+}
+
+function closeMentions() {
+  $('#mention-box').classList.add('hidden');
+  mentionMatches = [];
+}
+
+function renderMentions() {
+  const input = $('#chat-input');
+  const box = $('#mention-box');
+  const mq = mentionQuery(input);
+  if (!mq) { closeMentions(); return; }
+
+  const q = mq.q.toLocaleLowerCase('tr');
+  mentionMatches = [...state.profiles.values()]
+    .filter((n) => n !== state.displayName && n.toLocaleLowerCase('tr').startsWith(q))
+    .slice(0, 6);
+  if (!mentionMatches.length) { closeMentions(); return; }
+
+  mentionIx = Math.min(mentionIx, mentionMatches.length - 1);
+  box.innerHTML = '';
+  mentionMatches.forEach((n, i) => {
+    const b = el('button', i === mentionIx ? 'on' : '', `@${esc(n)}`);
+    b.type = 'button';
+    b.onmousedown = (e) => { e.preventDefault(); pickMention(n); };
+    box.appendChild(b);
+  });
+  box.classList.remove('hidden');
+}
+
+function pickMention(name) {
+  const input = $('#chat-input');
+  const mq = mentionQuery(input);
+  if (!mq) return;
+  const cur = input.selectionStart ?? input.value.length;
+  input.value = input.value.slice(0, mq.at) + '@' + name + ' ' + input.value.slice(cur);
+  const pos = mq.at + name.length + 2;
+  input.setSelectionRange(pos, pos);
+  closeMentions();
+  input.focus();
+}
+
+$('#chat-input').addEventListener('input', () => { mentionIx = 0; renderMentions(); });
+$('#chat-input').addEventListener('blur', () => setTimeout(closeMentions, 120));
+$('#chat-input').addEventListener('keydown', (e) => {
+  if (!mentionMatches.length) return;
+  if (e.key === 'ArrowDown') { e.preventDefault(); mentionIx = (mentionIx + 1) % mentionMatches.length; renderMentions(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); mentionIx = (mentionIx - 1 + mentionMatches.length) % mentionMatches.length; renderMentions(); }
+  else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickMention(mentionMatches[mentionIx]); }
+  else if (e.key === 'Escape') { e.preventDefault(); closeMentions(); }
+});
 
 $('#chat-form').onsubmit = async (e) => {
   e.preventDefault();
   const input = $('#chat-input');
   const text = input.value;
   input.value = '';
+  closeMentions();
   await sendMessage(text);
 };

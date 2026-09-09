@@ -6,10 +6,10 @@
   <title>Şampiyonlar Ligi Tahmin Ligi</title>
   <meta name="theme-color" content="#050b2e" />
   <meta name="description" content="Şirket içi Şampiyonlar Ligi tahmin yarışması" />
-  <link rel="icon" type="image/png" href="assets/favicon.png?v=11" />
-  <link rel="apple-touch-icon" href="assets/favicon.png?v=11" />
-  <link rel="stylesheet" href="styles.css?v=11" />
-  <script src="config.js?v=11"></script>
+  <link rel="icon" type="image/png" href="assets/favicon.png?v=12" />
+  <link rel="apple-touch-icon" href="assets/favicon.png?v=12" />
+  <link rel="stylesheet" href="styles.css?v=12" />
+  <script src="config.js?v=12"></script>
 </head>
 <body>
   <div class="stars" aria-hidden="true"></div>
@@ -17,7 +17,7 @@
   <!-- ------------------------------------------------ giriş ekranı -->
   <main id="auth" class="auth hidden">
     <div class="auth-card">
-      <img class="auth-logo" src="assets/ucl-logo.png?v=11" alt="UEFA Şampiyonlar Ligi" />
+      <img class="auth-logo" src="assets/ucl-logo.png?v=12" alt="UEFA Şampiyonlar Ligi" />
       <h1>Tahmin <span>Ligi</span></h1>
       <p class="auth-sub">Kullanıcı adın ve şifrenle gir, maç başına 1 / X / 2 tahmini yap.</p>
 
@@ -44,7 +44,7 @@
   <!-- ----------------------------------------------- uygulama -->
   <div id="app" class="hidden">
     <header class="top">
-      <div class="brand"><img class="brand-logo" src="assets/ucl-ball.png?v=11" alt="" /> Tahmin Ligi</div>
+      <div class="brand"><img class="brand-logo" src="assets/ucl-ball.png?v=12" alt="" /> Tahmin Ligi</div>
       <div class="who">
         <span id="me-name"></span>
         <button class="btn ghost sm" id="logout">Çıkış</button>
@@ -56,8 +56,7 @@
     <nav class="tabs" role="tablist">
       <button class="tab active" data-view="matches" role="tab">Maçlar</button>
       <button class="tab" data-view="preds" role="tab">Tahminler</button>
-      <button class="tab" data-view="table" role="tab">Puan</button>
-      <button class="tab" data-view="chat" role="tab">Sohbet<span id="chat-dot" class="dot hidden"></span></button>
+      <button class="tab" data-view="table" role="tab">Puan Durumu</button>
     </nav>
 
     <main class="content">
@@ -83,13 +82,6 @@
         <h2 class="section-title">Tur şampiyonları</h2>
         <div id="round-winners"></div>
       </section>
-      <section id="view-chat" class="view hidden">
-        <div id="chat-list" class="chat-list"></div>
-        <form id="chat-form" class="chat-form" autocomplete="off">
-          <input id="chat-input" type="text" maxlength="500" placeholder="Mesaj yaz…" />
-          <button class="btn primary" type="submit" aria-label="Gönder">➤</button>
-        </form>
-      </section>
     </main>
 
     <footer class="foot">
@@ -99,9 +91,26 @@
     </footer>
   </div>
 
+  <button id="chat-fab" class="chat-fab hidden" aria-label="Sohbeti aç">
+    💬<span id="chat-badge" class="badge hidden"></span>
+  </button>
+
+  <div id="chat-pop" class="chat-pop hidden" role="dialog" aria-label="Sohbet">
+    <div class="pop-head">
+      <b>Sohbet</b>
+      <button id="chat-close" class="pop-x" aria-label="Kapat">×</button>
+    </div>
+    <div id="chat-list" class="chat-list"></div>
+    <div id="mention-box" class="mention-box hidden"></div>
+    <form id="chat-form" class="chat-form" autocomplete="off">
+      <input id="chat-input" type="text" maxlength="500" placeholder="Mesaj yaz…  (@ ile etiketle)" />
+      <button class="btn primary" type="submit" aria-label="Gönder">➤</button>
+    </form>
+  </div>
+
   <div id="toast" class="toast"></div>
   <div id="boot" class="boot"><div class="spinner"></div></div>
 
-  <script type="module" src="app.js?v=11"></script>
+  <script type="module" src="app.js?v=12"></script>
 </body>
 </html>

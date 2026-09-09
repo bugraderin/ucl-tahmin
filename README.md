@@ -116,10 +116,15 @@ Evet, GitHub Pages ayarlarından *Custom domain* ile ücretsiz (HTTPS dahil).
 
 ## Sohbet
 
-"Sohbet" sekmesinde grup mesajlaşması var. Supabase Realtime üzerinden anlık çalışır;
-mesajlar 500 karakterle sınırlı, herkes yalnızca kendi mesajını silebilir. Okunmamış mesaj
-varsa sekmede küçük altın nokta belirir. Kurulum: `supabase/chat.sql` dosyasını SQL
-Editor'de bir kez çalıştır.
+Sağ alttaki 💬 baloncuğundan açılan küçük bir pencerede grup mesajlaşması var — sekme
+kaplamıyor. Supabase Realtime üzerinden anlık çalışır; mesajlar 500 karakterle sınırlı,
+herkes yalnızca kendi mesajını silebilir.
+
+`@` yazınca oyuncu listesi açılır, ok tuşları veya tıklamayla seçilir. Etiketler mesajda
+vurgulanır; seni etiketleyen mesajın kenarı altın rengine döner. Okunmamış mesaj sayısı
+baloncuğun üstünde rozet olarak görünür.
+
+Kurulum: `supabase/chat.sql` dosyasını SQL Editor'de bir kez çalıştır.
 
 ## Kupon
 
