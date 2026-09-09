@@ -5,8 +5,11 @@
 --  8 Eylül 2026'da 85 dakika hiç çalışmadı; maçlar IN_PLAY'de dondu ve
 --  bitmiş sayılmadıkları için puanlar işlenmedi.
 --
---  Ne yapar: 10 dakikada bir sadece KONTROL eder — "maç saati mi ve veri
---  12 dakikadan eski mi?" Öyleyse GitHub'daki senkron akışını tetikler.
+--  Ne yapar: 10 dakikada bir iki şeye bakar ve gerekiyorsa GitHub'daki
+--  senkron akışını tetikler:
+--    (A) Başlamasının üzerinden 100 dk geçmiş ama hâlâ bitmemiş bir maç
+--        var mı? Varsa o maç için bir kez tetikler (bitiş garantisi).
+--    (B) Maç saatinde veri 12 dakikadır tazelenmiyor mu?
 --  Veri işleme mantığı tek yerde (scripts/sync-matches.mjs) kalır.
 --
 --  Kurulum: Supabase > SQL Editor > New query > bu dosyayı yapıştır.
@@ -47,21 +50,32 @@ alter table public.watchdog_log enable row level security;  -- API'ye kapalı
 -- 4) Bekçi fonksiyonu --------------------------------------------------
 create or replace function public.sync_watchdog(force boolean default false)
 returns text
-language plpgsql
-security definer
-set search_path = public
-as $$
+language plpgsql security definer set search_path = public as $$
 declare
   v_last   timestamptz;
   v_window boolean;
+  v_mac    bigint;
   v_token  text;
   v_req    bigint;
   v_reason text;
 begin
   select max(updated_at) into v_last from public.matches;
 
-  -- Maç penceresi: başlamasına 20 dk kalmış ya da başlayalı 3 saat
-  -- olmamış, henüz bitmemiş bir maç var mı?
+  -- (A) BİTİŞ KONTROLÜ — bir maç 90 dk + uzatma sürer. Başlamasının
+  -- üzerinden 100 dk geçtiği hâlde hâlâ bitmemiş görünen her maç için
+  -- BİR KEZ senkron tetikleriz; veri taze olsa bile. Tetiklenen çalışma
+  -- takip moduna girip maç bitene kadar tazelemeye devam eder.
+  select m.id into v_mac
+    from public.matches m
+   where m.status not in ('FINISHED', 'POSTPONED', 'CANCELLED', 'SUSPENDED')
+     and m.utc_date < now() - interval '100 minutes'
+     and m.utc_date > now() - interval '6 hours'
+     and not exists (select 1 from public.watchdog_log l
+                      where l.reason = 'bitis:' || m.id)
+   order by m.utc_date
+   limit 1;
+
+  -- (B) BAYATLIK KONTROLÜ — maç saatinde veri 12 dakikadır güncellenmiyorsa.
   select exists (
     select 1 from public.matches
     where status <> 'FINISHED'
@@ -69,13 +83,16 @@ begin
       and utc_date > now() - interval '3 hours'
   ) into v_window;
 
-  if not force then
-    if not v_window then
-      return 'maç penceresi dışında, işlem yok';
-    end if;
-    if v_last > now() - interval '12 minutes' then
-      return 'veri taze (' || v_last || '), işlem yok';
-    end if;
+  if force then
+    v_reason := 'elle test';
+  elsif v_mac is not null then
+    v_reason := 'bitis:' || v_mac;              -- maç başına tek sefer
+  elsif not v_window then
+    return 'maç penceresi dışında, işlem yok';
+  elsif v_last > now() - interval '12 minutes' then
+    return 'veri taze (' || v_last || '), işlem yok';
+  else
+    v_reason := 'veri bayat, son güncelleme: ' || coalesce(v_last::text, 'yok');
   end if;
 
   select decrypted_secret into v_token
@@ -83,9 +100,6 @@ begin
   if v_token is null then
     return 'HATA: vault içinde github_actions_token yok';
   end if;
-
-  v_reason := case when force then 'elle test'
-                   else 'veri bayat, son güncelleme: ' || coalesce(v_last::text, 'yok') end;
 
   select net.http_post(
     url := 'https://api.github.com/repos/bugraderin/ucl-tahmin/actions/workflows/sync-matches.yml/dispatches',
@@ -119,6 +133,8 @@ select cron.schedule('ucl-temizlik', '17 4 * * *', $job$
   delete from cron.job_run_details where end_time < now() - interval '3 days';
   delete from net._http_response  where created  < now() - interval '3 days';
   delete from public.watchdog_log where at       < now() - interval '30 days';
+  -- not: 'bitis:<id>' kayıtları maç başına tek tetiklemeyi garanti eder,
+  -- 30 günlük saklama fikstür için fazlasıyla yeterli.
 $job$);
 
 -- 6) Denetim görünümü --------------------------------------------------
