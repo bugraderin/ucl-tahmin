@@ -84,16 +84,24 @@ const isLocked = (m) => new Date(m.lock_at).getTime() <= Date.now();
 const isFinished = (m) => m.status === 'FINISHED';
 const isLive = (m) => ['IN_PLAY', 'PAUSED'].includes(m.status);
 
-/** SQL'deki puan_hesapla ile birebir aynı kural. */
+/** SQL'deki puan_hesapla ile birebir aynı kural.
+ *  Çifte şansta her seçimin kendi skor tahmini vardır. */
 function pointsFor(m, p) {
   if (!p || !isFinished(m) || m.result == null) return null;
-  const dogru = p.pick === m.result || (p.pick2 && p.pick2 === m.result);
-  if (!dogru) return 0;
-  const tamSkor = p.home_score != null && p.home_score === m.home_score
-                  && p.away_score === m.away_score;
-  if (tamSkor) return p.pick2 ? 4 : 5;
-  if (!p.pick2) return 3;
-  return (p.pick === 'X' || p.pick2 === 'X') ? 3 : 2;   // 1+2 ikilisi daha ucuz
+  const taban = !p.pick2 ? 3 : (p.pick === 'X' || p.pick2 === 'X') ? 3 : 2;
+
+  if (p.pick === m.result) {
+    const tam = p.home_score != null && p.home_score === m.home_score
+                && p.away_score === m.away_score;
+    if (tam) return p.pick2 ? 4 : 5;
+    return taban;
+  }
+  if (p.pick2 && p.pick2 === m.result) {
+    const tam2 = p.home_score2 != null && p.home_score2 === m.home_score
+                 && p.away_score2 === m.away_score;
+    return tam2 ? 4 : taban;
+  }
+  return 0;
 }
 
 const CIFTE = 'cifte_sans';
@@ -298,24 +306,36 @@ async function savePrediction(match, patch) {
     match_id: match.id,
     pick: patch.pick ?? prev.pick,
     pick2: 'pick2' in patch ? patch.pick2 : (prev.pick2 ?? null),
-    home_score: 'home_score' in patch ? patch.home_score : (prev.home_score ?? null),
-    away_score: 'away_score' in patch ? patch.away_score : (prev.away_score ?? null),
+    home_score:  'home_score'  in patch ? patch.home_score  : (prev.home_score  ?? null),
+    away_score:  'away_score'  in patch ? patch.away_score  : (prev.away_score  ?? null),
+    home_score2: 'home_score2' in patch ? patch.home_score2 : (prev.home_score2 ?? null),
+    away_score2: 'away_score2' in patch ? patch.away_score2 : (prev.away_score2 ?? null),
     updated_at: new Date().toISOString(),
   };
   if (next.pick2 === next.pick) next.pick2 = null;
+  if (!next.pick2) { next.home_score2 = null; next.away_score2 = null; }
 
-  // Skor tahmini, seçilen sonuç(lar)dan biriyle tutarlı olmak zorunda.
+  const ad = { '1': 'ev sahibi kazanır', X: 'beraberlik', '2': 'deplasman kazanır' };
+  const sonucu = (h, a) => (h > a ? '1' : h === a ? 'X' : '2');
+
+  // Her skor, ait olduğu seçimle tutarlı olmak zorunda.
   if (next.home_score != null && next.away_score != null) {
-    const derived = next.home_score > next.away_score ? '1'
-                  : next.home_score === next.away_score ? 'X' : '2';
+    const d = sonucu(next.home_score, next.away_score);
     if (!next.pick) {
-      next.pick = derived;                    // henüz seçim yoksa skordan türet
-    } else if (next.pick !== derived && next.pick2 !== derived) {
-      const ad = { '1': 'ev sahibi kazanır', X: 'beraberlik', '2': 'deplasman kazanır' };
-      const secim = next.pick2 ? `${next.pick}+${next.pick2}` : next.pick;
-      toast(`Çelişki: “${secim}” seçtin ama ` +
-            `${next.home_score}-${next.away_score} skoru “${ad[derived]}” demek.`, true);
-      renderMatches();                        // girilen değeri geri al
+      next.pick = d;                          // henüz seçim yoksa skordan türet
+    } else if (next.pick !== d) {
+      toast(`“${next.pick}” için girdiğin ${next.home_score}-${next.away_score} skoru ` +
+            `“${ad[d]}” demek.`, true);
+      renderMatches();
+      return;
+    }
+  }
+  if (next.pick2 && next.home_score2 != null && next.away_score2 != null) {
+    const d2 = sonucu(next.home_score2, next.away_score2);
+    if (next.pick2 !== d2) {
+      toast(`“${next.pick2}” için girdiğin ${next.home_score2}-${next.away_score2} skoru ` +
+            `“${ad[d2]}” demek.`, true);
+      renderMatches();
       return;
     }
   }
@@ -324,7 +344,15 @@ async function savePrediction(match, patch) {
   state.myPreds.set(match.id, next);           // iyimser güncelleme
   renderMatches();
 
-  const { error } = await sb.from('predictions').upsert(next, { onConflict: 'user_id,match_id' });
+  // İkinci skor sütunları yalnızca çifte şans kullanılıyorsa gönderilir;
+  // böylece o sütunlar veritabanında yokken normal tahminler bozulmaz.
+  const payload = { ...next };
+  if (payload.home_score2 == null && payload.away_score2 == null) {
+    delete payload.home_score2;
+    delete payload.away_score2;
+  }
+
+  const { error } = await sb.from('predictions').upsert(payload, { onConflict: 'user_id,match_id' });
   if (error) {
     state.myPreds.set(match.id, prev.pick ? prev : undefined);
     if (!prev.pick) state.myPreds.delete(match.id);
@@ -477,27 +505,51 @@ function matchCard(m) {
   }
   card.appendChild(picks);
 
-  // --- skor tahmini (opsiyonel bonus)
-  const sr = el('div', 'scorerow');
-  const mk = (which) => {
-    const i = el('input');
-    i.type = 'number'; i.min = '0'; i.max = '20'; i.inputMode = 'numeric';
-    i.placeholder = '–';
-    i.value = mine?.[which] ?? '';
-    i.disabled = locked;
-    i.onchange = () => {
-      const v = i.value === '' ? null : Math.max(0, Math.min(20, parseInt(i.value, 10)));
-      i.value = v ?? '';
-      savePrediction(m, { [which]: v });
+  // --- skor tahmini (her seçim için ayrı)
+  const skorSatiri = (secim, evAlan, depAlan, etiketli) => {
+    const sr = el('div', 'scorerow');
+    if (etiketli) sr.appendChild(el('span', 'scoretag', secim));
+    const mk = (which) => {
+      const i = el('input');
+      i.type = 'number'; i.min = '0'; i.max = '20'; i.inputMode = 'numeric';
+      i.placeholder = '–';
+      i.value = mine?.[which] ?? '';
+      i.disabled = locked;
+      i.onchange = () => {
+        const v = i.value === '' ? null : Math.max(0, Math.min(20, parseInt(i.value, 10)));
+        i.value = v ?? '';
+        savePrediction(m, { [which]: v });
+      };
+      return i;
     };
-    return i;
+    sr.appendChild(mk(evAlan));
+    sr.appendChild(el('span', '', '–'));
+    sr.appendChild(mk(depAlan));
+    if (!etiketli) {
+      sr.appendChild(el('span', 'lbl', locked ? 'skor tahmini'
+                                              : 'skor tahmini (opsiyonel, +2 bonus)'));
+    } else {
+      sr.appendChild(el('span', 'lbl', `${secim} olursa skor`));
+    }
+    const p2 = etiketli && secim === mine?.pick2
+      ? null : (etiketli ? null : pointsFor(m, mine));
+    if (p2 != null) sr.appendChild(el('span', 'pts' + (p2 ? '' : ' zero'),
+      `${p2 > 0 ? '+' : ''}${p2} puan`));
+    return sr;
   };
-  sr.appendChild(mk('home_score'));
-  sr.appendChild(el('span', '', '–'));
-  sr.appendChild(mk('away_score'));
-  sr.appendChild(el('span', 'lbl', locked ? 'skor tahmini' : 'skor tahmini (opsiyonel, +2 bonus)'));
-  if (pts != null) sr.appendChild(el('span', 'pts' + (pts ? '' : ' zero'), `${pts > 0 ? '+' : ''}${pts} puan`));
-  card.appendChild(sr);
+
+  if (mine?.pick2) {
+    card.appendChild(skorSatiri(mine.pick,  'home_score',  'away_score',  true));
+    card.appendChild(skorSatiri(mine.pick2, 'home_score2', 'away_score2', true));
+    const pts2 = pointsFor(m, mine);
+    if (pts2 != null) {
+      card.appendChild(el('div', 'scorerow',
+        `<span class="lbl"></span><span class="pts${pts2 ? '' : ' zero'}">` +
+        `${pts2 > 0 ? '+' : ''}${pts2} puan</span>`));
+    }
+  } else {
+    card.appendChild(skorSatiri(mine?.pick, 'home_score', 'away_score', false));
+  }
 
   // --- market: çifte şans
   if (!locked) {
