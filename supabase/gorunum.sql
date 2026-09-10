@@ -37,3 +37,66 @@ join public.matches  m  on m.id  = p.match_id;
 
 comment on view public.tahminler_okunur is
   'Tahminlerin okunabilir hali: oyuncu adı, maç adı, sonuç ve puan. Sadece panel içindir.';
+
+-- ---------------------------------------------------------------------
+--  Tahmin düzeltme yardımcısı
+--  UUID aramadan, oyuncu adıyla düzeltme yapmak için.
+--    select public.tahmin_duzelt('tonguc', 575336, '1');
+--    select public.tahmin_duzelt('tonguc', 575336, '1', 2, 0);   -- skorlu
+--  Panelden (postgres rolü) çalıştırılır; RLS'i atlar, yani kilitli
+--  maçlarda da çalışır. Bilerek böyle: veri hatası düzeltmek içindir.
+-- ---------------------------------------------------------------------
+create or replace function public.tahmin_duzelt(
+  oyuncu   text,
+  mac_id   bigint,
+  yeni_pick text,
+  ev       int default null,
+  dep      int default null
+) returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  v_uid  uuid;
+  v_mac  text;
+  v_eski text;
+begin
+  if yeni_pick not in ('1', 'X', '2') then
+    return 'HATA: tahmin 1, X veya 2 olmalı';
+  end if;
+
+  select id into v_uid from public.profiles
+   where lower(display_name) = lower(btrim(oyuncu));
+  if v_uid is null then
+    return 'HATA: "' || oyuncu || '" adında oyuncu yok';
+  end if;
+
+  select home_team || ' - ' || away_team into v_mac
+    from public.matches where id = mac_id;
+  if v_mac is null then
+    return 'HATA: ' || mac_id || ' numaralı maç yok';
+  end if;
+
+  -- Skor verildiyse 1/X/2 ile tutarlı olmalı.
+  if ev is not null and dep is not null then
+    if yeni_pick <> (case when ev > dep then '1' when ev = dep then 'X' else '2' end) then
+      return 'HATA: ' || ev || '-' || dep || ' skoru "' || yeni_pick || '" tahminiyle çelişiyor';
+    end if;
+  end if;
+
+  select pick into v_eski from public.predictions
+   where user_id = v_uid and match_id = mac_id;
+
+  insert into public.predictions (user_id, match_id, pick, home_score, away_score, updated_at)
+  values (v_uid, mac_id, yeni_pick, ev, dep, now())
+  on conflict (user_id, match_id) do update
+    set pick = excluded.pick,
+        home_score = excluded.home_score,
+        away_score = excluded.away_score,
+        updated_at = now();
+
+  return v_mac || ' — ' || oyuncu || ': '
+         || coalesce(v_eski, '(yok)') || ' → ' || yeni_pick
+         || coalesce(' (' || ev || '-' || dep || ')', '');
+end $$;
+
+revoke all on function public.tahmin_duzelt(text, bigint, text, int, int)
+  from public, anon, authenticated;
