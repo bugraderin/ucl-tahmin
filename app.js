@@ -74,6 +74,9 @@ const state = {
   fDay: null,      // 'all' | gün anahtarı
   fUser: null,     // 'all' | user_id
   lastSync: null,  // maclarin en son guncellendigi an
+  bakiye: 0,       // market puani
+  urunler: [],     // market_items
+  alimlar: new Set(),   // cifte sans alinan match_id'ler
   view: 'matches',
 };
 
@@ -81,12 +84,20 @@ const isLocked = (m) => new Date(m.lock_at).getTime() <= Date.now();
 const isFinished = (m) => m.status === 'FINISHED';
 const isLive = (m) => ['IN_PLAY', 'PAUSED'].includes(m.status);
 
+/** SQL'deki puan_hesapla ile birebir aynı kural. */
 function pointsFor(m, p) {
   if (!p || !isFinished(m) || m.result == null) return null;
-  let pts = p.pick === m.result ? 3 : 0;
-  if (p.home_score != null && p.home_score === m.home_score && p.away_score === m.away_score) pts += 2;
-  return pts;
+  const dogru = p.pick === m.result || (p.pick2 && p.pick2 === m.result);
+  if (!dogru) return 0;
+  const tamSkor = p.home_score != null && p.home_score === m.home_score
+                  && p.away_score === m.away_score;
+  if (tamSkor) return p.pick2 ? 4 : 5;
+  if (!p.pick2) return 3;
+  return (p.pick === 'X' || p.pick2 === 'X') ? 3 : 2;   // 1+2 ikilisi daha ucuz
 }
+
+const CIFTE = 'cifte_sans';
+const urunFiyat = (kod) => state.urunler.find((u) => u.code === kod)?.cost ?? 10;
 
 /* ==================================================================== */
 /*  Kimlik doğrulama                                                     */
@@ -166,14 +177,62 @@ function translateAuthError(m = '') {
 
 $('#logout').onclick = () => sb.auth.signOut();
 
+/** Üst bardaki market bakiyesi. */
+function renderBakiye() {
+  const el0 = $('#bakiye');
+  if (!el0) return;
+  el0.textContent = `🪙 ${state.bakiye}`;
+  el0.title = `Market puanın: ${state.bakiye}. Lider tablosu puanın bundan etkilenmez.`;
+}
+
+/** Bakiyeyi ve alımları sunucudan tazele. */
+async function refreshMarket() {
+  const [b, a] = await Promise.all([
+    sb.from('market_bakiye').select('bakiye').eq('user_id', state.user.id).maybeSingle(),
+    sb.from('purchases').select('match_id, item_code').eq('user_id', state.user.id),
+  ]);
+  state.bakiye = b.data?.bakiye ?? state.bakiye;
+  state.alimlar = new Set((a.data || [])
+    .filter((x) => x.item_code === CIFTE).map((x) => x.match_id));
+  renderBakiye();
+}
+
+async function cifteSansAl(match) {
+  const { data, error } = await sb.rpc('market_satin_al',
+    { p_item: CIFTE, p_match: match.id });
+  if (error) { toast('Alınamadı: ' + error.message, true); return; }
+  if (!data?.ok) { toast(data?.hata || 'Alınamadı', true); return; }
+  state.alimlar.add(match.id);
+  state.bakiye = data.bakiye;
+  renderBakiye();
+  renderMatches();
+  toast(`Çifte şans alındı (−${data.ucret} 🪙). İkinci seçimini işaretle.`);
+}
+
+async function cifteSansIade(match) {
+  const { data, error } = await sb.rpc('market_iade', { p_item: CIFTE, p_match: match.id });
+  if (error) { toast('İade edilemedi: ' + error.message, true); return; }
+  if (!data?.ok) { toast(data?.hata || 'İade edilemedi', true); return; }
+  state.alimlar.delete(match.id);
+  state.bakiye += data.iade;
+  const mine = state.myPreds.get(match.id);
+  if (mine) { mine.pick2 = null; state.myPreds.set(match.id, mine); }
+  renderBakiye();
+  renderMatches();
+  toast(`İade alındı (+${data.iade} 🪙)`);
+}
+
 /* ==================================================================== */
 /*  Veri yükleme                                                         */
 /* ==================================================================== */
 async function loadAll() {
-  const [mRes, pRes, prRes] = await Promise.all([
+  const [mRes, pRes, prRes, bRes, aRes, iRes] = await Promise.all([
     sb.from('matches').select('*').order('utc_date', { ascending: true }),
-    sb.from('predictions').select('user_id, match_id, pick, home_score, away_score'),
+    sb.from('predictions').select('user_id, match_id, pick, pick2, home_score, away_score'),
     sb.from('profiles').select('id, display_name'),
+    sb.from('market_bakiye').select('bakiye').eq('user_id', state.user.id).maybeSingle(),
+    sb.from('purchases').select('match_id, item_code').eq('user_id', state.user.id),
+    sb.from('market_items').select('code, name, description, cost').eq('active', true),
   ]);
   if (mRes.error) throw mRes.error;
 
@@ -181,9 +240,15 @@ async function loadAll() {
   state.lastSync = state.matches.reduce(
     (a, m) => (!a || m.updated_at > a ? m.updated_at : a), null);
 
+  state.bakiye = bRes.data?.bakiye ?? 0;
+  state.urunler = iRes.data || [];
+  state.alimlar = new Set((aRes.data || [])
+    .filter((a) => a.item_code === CIFTE).map((a) => a.match_id));
+
   state.profiles = new Map((prRes.data || []).map((p) => [p.id, p.display_name]));
   state.displayName = state.profiles.get(state.user.id) || (state.user.email || '').split('@')[0];
   $('#me-name').textContent = state.displayName;
+  renderBakiye();
 
   state.myPreds = new Map();
   state.allPreds = new Map();
@@ -232,20 +297,23 @@ async function savePrediction(match, patch) {
     user_id: state.user.id,
     match_id: match.id,
     pick: patch.pick ?? prev.pick,
+    pick2: 'pick2' in patch ? patch.pick2 : (prev.pick2 ?? null),
     home_score: 'home_score' in patch ? patch.home_score : (prev.home_score ?? null),
     away_score: 'away_score' in patch ? patch.away_score : (prev.away_score ?? null),
     updated_at: new Date().toISOString(),
   };
+  if (next.pick2 === next.pick) next.pick2 = null;
 
-  // Skor tahmini ile 1/X/2 birbiriyle tutarlı olmak zorunda.
+  // Skor tahmini, seçilen sonuç(lar)dan biriyle tutarlı olmak zorunda.
   if (next.home_score != null && next.away_score != null) {
     const derived = next.home_score > next.away_score ? '1'
                   : next.home_score === next.away_score ? 'X' : '2';
     if (!next.pick) {
       next.pick = derived;                    // henüz seçim yoksa skordan türet
-    } else if (next.pick !== derived) {
+    } else if (next.pick !== derived && next.pick2 !== derived) {
       const ad = { '1': 'ev sahibi kazanır', X: 'beraberlik', '2': 'deplasman kazanır' };
-      toast(`Çelişki: “${next.pick} — ${ad[next.pick]}” seçtin ama ` +
+      const secim = next.pick2 ? `${next.pick}+${next.pick2}` : next.pick;
+      toast(`Çelişki: “${secim}” seçtin ama ` +
             `${next.home_score}-${next.away_score} skoru “${ad[derived]}” demek.`, true);
       renderMatches();                        // girilen değeri geri al
       return;
@@ -265,7 +333,8 @@ async function savePrediction(match, patch) {
       ? 'Bu maç kilitlendi, tahmin değiştirilemez.'
       : 'Kaydedilemedi: ' + error.message, true);
   } else {
-    toast(`${match.home_team} — ${match.away_team}: ${next.pick} kaydedildi`);
+    toast(`${match.home_team} — ${match.away_team}: ` +
+          `${next.pick2 ? next.pick + '+' + next.pick2 : next.pick} kaydedildi`);
     renderReminder();
   }
 }
@@ -375,17 +444,35 @@ function matchCard(m) {
   card.appendChild(top);
 
   // --- 1 / X / 2
+  const cifte = state.alimlar.has(m.id);
   const picks = el('div', 'picks');
   const labels = { '1': 'Ev sahibi', 'X': 'Beraberlik', '2': 'Deplasman' };
   for (const key of ['1', 'X', '2']) {
-    const b = el('button', 'pick', `${key}<small>${labels[key]}</small>`);
-    if (mine?.pick === key) {
+    const secili = mine?.pick === key;
+    const ikinci = mine?.pick2 === key;
+    const b = el('button', 'pick' + (ikinci ? ' ikinci' : ''), `${key}<small>${labels[key]}</small>`);
+    if (secili || ikinci) {
       b.classList.add('on');
       if (fin && m.result) b.classList.add(m.result === key ? 'right' : 'wrong');
     }
     b.disabled = locked;
-    if (mine?.pick === key && !locked) b.title = 'Seçimi kaldırmak için tekrar bas';
-    b.onclick = () => (mine?.pick === key ? clearPrediction(m) : savePrediction(m, { pick: key }));
+    if (!locked) {
+      if (secili || ikinci) b.title = 'Kaldırmak için tekrar bas';
+      else if (cifte && mine?.pick && !mine?.pick2) b.title = 'İkinci seçimin olarak işaretle';
+    }
+    b.onclick = () => {
+      if (secili) {
+        // Çifte şansta birinciyi silersen ikincisi birinci olur.
+        if (mine?.pick2) savePrediction(m, { pick: mine.pick2, pick2: null });
+        else clearPrediction(m);
+      } else if (ikinci) {
+        savePrediction(m, { pick2: null });
+      } else if (cifte && mine?.pick && !mine?.pick2) {
+        savePrediction(m, { pick2: key });
+      } else {
+        savePrediction(m, { pick: key, pick2: null });
+      }
+    };
     picks.appendChild(b);
   }
   card.appendChild(picks);
@@ -411,6 +498,31 @@ function matchCard(m) {
   sr.appendChild(el('span', 'lbl', locked ? 'skor tahmini' : 'skor tahmini (opsiyonel, +2 bonus)'));
   if (pts != null) sr.appendChild(el('span', 'pts' + (pts ? '' : ' zero'), `${pts > 0 ? '+' : ''}${pts} puan`));
   card.appendChild(sr);
+
+  // --- market: çifte şans
+  if (!locked) {
+    const fiyat = urunFiyat(CIFTE);
+    const mr = el('div', 'market-row');
+    if (cifte) {
+      mr.appendChild(el('span', 'lbl',
+        mine?.pick2 ? `Çifte şans: <b style="color:var(--text)">${mine.pick} + ${mine.pick2}</b>`
+                    : 'Çifte şans aktif — ikinci seçimini işaretle'));
+      const ib = el('button', 'market-btn iade', 'iade al');
+      ib.onclick = () => cifteSansIade(m);
+      mr.appendChild(ib);
+    } else {
+      mr.appendChild(el('span', 'lbl', 'İki sonuç birden seç'));
+      const ab = el('button', 'market-btn', `Çifte şans · ${fiyat} 🪙`);
+      ab.disabled = state.bakiye < fiyat;
+      if (ab.disabled) ab.title = `Bakiyen yetmiyor (${state.bakiye} 🪙)`;
+      ab.onclick = () => cifteSansAl(m);
+      mr.appendChild(ab);
+    }
+    card.appendChild(mr);
+  } else if (mine?.pick2) {
+    card.appendChild(el('div', 'market-row',
+      `<span class="lbl">Çifte şans: <b style="color:var(--text)">${mine.pick} + ${mine.pick2}</b></span>`));
+  }
 
   // --- maç bittiyse: dağılım + kim ne dedi
   if (fin) {
@@ -448,8 +560,9 @@ function revealBlock(m, all) {
   for (const p of [...all].sort((a, b) => order[a.pick] - order[b.pick])) {
     const name = state.profiles.get(p.user_id) || 'Bilinmeyen';
     const score = p.home_score != null && p.away_score != null ? ` ${p.home_score}-${p.away_score}` : '';
-    const right = isFinished(m) && m.result === p.pick;
-    list.appendChild(el('span', 'chip' + (right ? ' right' : ''), `<b>${esc(name)}</b> ${p.pick}${score}`));
+    const right = isFinished(m) && (m.result === p.pick || (p.pick2 && m.result === p.pick2));
+    const secim = p.pick2 ? `${p.pick}+${p.pick2}` : p.pick;
+    list.appendChild(el('span', 'chip' + (right ? ' right' : ''), `<b>${esc(name)}</b> ${secim}${score}`));
   }
   box.appendChild(list);
   return box;
@@ -531,9 +644,11 @@ function renderFilters() {
 
 function predRow(p, m, showName) {
   const row = el('div', 'prow');
-  const right = isFinished(m) && m.result === p.pick;
-  const wrong = isFinished(m) && m.result && m.result !== p.pick;
-  row.appendChild(el('div', 'badge' + (right ? ' right' : wrong ? ' wrong' : ''), p.pick));
+  const tuttu = m.result === p.pick || (p.pick2 && m.result === p.pick2);
+  const right = isFinished(m) && tuttu;
+  const wrong = isFinished(m) && m.result && !tuttu;
+  row.appendChild(el('div', 'badge' + (right ? ' right' : wrong ? ' wrong' : ''),
+    p.pick2 ? `${p.pick}+${p.pick2}` : p.pick));
   row.appendChild(el('div', 'who-nm',
     esc(showName ? (state.profiles.get(p.user_id) || 'Bilinmeyen') +
       (p.user_id === state.user.id ? ' (sen)' : '') : 'Tahminin')));
@@ -896,13 +1011,14 @@ function couponCanvas(dayK) {
 
     // seçim kutusu
     const bx = W - PAD - 92, by = y - 26, bw = 92, bh = 56;
-    const secim = p?.pick;
+    const secim = p?.pick2 ? `${p.pick}+${p.pick2}` : p?.pick;
     c.strokeStyle = secim ? ink : line; c.lineWidth = 2;
     c.strokeRect(bx, by, bw, bh);
     c.textAlign = 'center';
     if (secim) {
-      c.fillStyle = ink; c.font = `700 30px ${MONO}`;
-      c.fillText(secim, bx + bw / 2, by + 38);
+      c.fillStyle = ink;
+      c.font = `700 ${secim.length > 1 ? 22 : 30}px ${MONO}`;
+      c.fillText(secim, bx + bw / 2, by + 37);
       if (p.home_score != null && p.away_score != null) {
         c.font = `14px ${MONO}`; c.fillStyle = soft;
         c.fillText(`${p.home_score}-${p.away_score}`, bx + bw / 2, y + 44);
