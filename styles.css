@@ -417,10 +417,3 @@ table.tbl tr.me td { background: rgba(77, 139, 255, .11); }
 .market-btn:disabled { opacity: .4; cursor: not-allowed; }
 .market-btn.iade { color: var(--muted); background: transparent; border-color: var(--line); }
 .pick.ikinci { border-style: dashed; }
-
-.scoretag {
-  flex: none; width: 20px; height: 26px; line-height: 24px; text-align: center;
-  font-size: 12.5px; font-weight: 800; color: var(--gold);
-  background: rgba(232, 200, 119, .12); border: 1px solid rgba(232, 200, 119, .3);
-  border-radius: 7px;
-}
