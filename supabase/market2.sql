@@ -8,9 +8,9 @@ alter table public.predictions
   add column if not exists home_score2 int check (home_score2 between 0 and 20),
   add column if not exists away_score2 int check (away_score2 between 0 and 20);
 
--- Eski imza (8 parametreli) bırakılıyor, yenisi 10 parametreli.
-drop function if exists public.puan_hesapla(text, text, int, int, text, int, int, text);
-
+-- Yeni imza (10 parametreli) eskisinin yanına eklenir; görünümler buna
+-- geçirildikten SONRA eski imza silinir. Ters sırada yapılırsa Postgres
+-- "bağımlı nesneler var" diyerek reddeder.
 create or replace function public.puan_hesapla(
   p_pick text, p_pick2 text,
   p_ev int,  p_dep int,      -- birinci seçimin skor tahmini
@@ -100,3 +100,6 @@ group by m.round_label, pf.id, pf.display_name;
 
 grant select on public.leaderboard, public.round_leaderboard to anon, authenticated;
 grant select on public.market_bakiye to authenticated;
+
+-- ------------------------------------- artık kimse kullanmıyor, kaldır
+drop function if exists public.puan_hesapla(text, text, int, int, text, int, int, text);
